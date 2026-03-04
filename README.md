@@ -1,5 +1,7 @@
 # gate
 
+![Gate Banner](banner.png)
+
 `gate` is the Centaur of Polis: the city gatekeeper.
 
 It has two jobs:
