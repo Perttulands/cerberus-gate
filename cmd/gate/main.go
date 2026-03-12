@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -10,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/Perttulands/polis-utils/brclient"
 
 	"polis/gate/internal/bead"
 	"polis/gate/internal/city"
@@ -20,6 +23,8 @@ import (
 const defaultHistoryLimit = 20
 
 var filterValueRe = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
+
+var historyBRClient = brclient.New()
 
 func main() {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -255,7 +260,7 @@ func runCity(ctx context.Context, args []string) int {
 }
 
 func runHistory(args []string) int {
-	if _, err := exec.LookPath("br"); err != nil {
+	if !historyBRClient.Available() {
 		fmt.Fprintln(os.Stderr, "gate history requires br (beads) to be installed")
 		return 1
 	}
@@ -318,12 +323,17 @@ func runHistory(args []string) int {
 		brArgs = append(brArgs, "--assignee", assigneeFilter)
 	}
 
-	cmd := exec.Command("br", brArgs...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			return exitErr.ExitCode()
+	result, err := historyBRClient.Run(context.Background(), brclient.Invocation{Args: brArgs})
+	if len(result.Stdout) > 0 {
+		os.Stdout.Write(result.Stdout)
+	}
+	if len(result.Stderr) > 0 {
+		os.Stderr.Write(result.Stderr)
+	}
+	if err != nil {
+		var cmdErr *brclient.CommandError
+		if errors.As(err, &cmdErr) && cmdErr.Result.ExitCode > 0 {
+			return cmdErr.Result.ExitCode
 		}
 		fmt.Fprintf(os.Stderr, "br search failed: %v\n", err)
 		return 1

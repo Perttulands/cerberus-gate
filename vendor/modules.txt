@@ -1,0 +1,10 @@
+# github.com/Perttulands/polis-utils v0.0.0-20260312221136-23172fc2ffe4
+## explicit; go 1.25.0
+github.com/Perttulands/polis-utils/brclient
+# github.com/pelletier/go-toml/v2 v2.2.4
+## explicit; go 1.21.0
+github.com/pelletier/go-toml/v2
+github.com/pelletier/go-toml/v2/internal/characters
+github.com/pelletier/go-toml/v2/internal/danger
+github.com/pelletier/go-toml/v2/internal/tracker
+github.com/pelletier/go-toml/v2/unstable

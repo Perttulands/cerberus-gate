@@ -268,6 +268,19 @@ func captureStdout(t *testing.T, fn func()) string {
 	return buf.String()
 }
 
+func readLines(t *testing.T, path string) []string {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+	text := strings.TrimSpace(string(data))
+	if text == "" {
+		return nil
+	}
+	return strings.Split(text, "\n")
+}
+
 func writeTestFile(t *testing.T, dir, rel, content string) {
 	t.Helper()
 	target := filepath.Join(dir, filepath.FromSlash(rel))
@@ -837,5 +850,39 @@ func TestRunHistory_FlagErrors(t *testing.T) {
 				t.Fatalf("runHistory(%v) = %d, want 1", tt.args, code)
 			}
 		})
+	}
+}
+
+func TestRunHistory_UsesSharedBRClient(t *testing.T) {
+	tmp := t.TempDir()
+	argsPath := filepath.Join(tmp, "br.args")
+	binDir := filepath.Join(tmp, "bin")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatalf("mkdir bin: %v", err)
+	}
+
+	brScript := filepath.Join(binDir, "br")
+	script := "#!/bin/sh\nprintf '%s\\n' \"$@\" > " + argsPath + "\nprintf 'history-output\\n'\n"
+	if err := os.WriteFile(brScript, []byte(script), 0o755); err != nil {
+		t.Fatalf("write br script: %v", err)
+	}
+
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	output := captureStdout(t, func() {
+		code := runHistory([]string{"--repo", "relay", "--citizen", "alice", "--limit", "7"})
+		if code != 0 {
+			t.Fatalf("runHistory returned %d, want 0", code)
+		}
+	})
+
+	if !strings.Contains(output, "history-output") {
+		t.Fatalf("stdout = %q, want history output", output)
+	}
+
+	args := readLines(t, argsPath)
+	want := []string{"search", "gate", "--type", "gate", "--sort", "created", "--reverse", "--limit", "7", "--label", "repo:relay", "--assignee", "alice"}
+	if strings.Join(args, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("history args = %#v, want %#v", args, want)
 	}
 }

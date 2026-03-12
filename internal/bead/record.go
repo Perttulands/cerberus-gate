@@ -1,19 +1,38 @@
 package bead
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os/exec"
 	"sort"
 	"strings"
 
+	"github.com/Perttulands/polis-utils/brclient"
+
 	"polis/gate/internal/city"
 	"polis/gate/internal/verdict"
 )
 
 var (
-	lookPath = exec.LookPath
+	sharedBRClient = brclient.New()
+	lookPath       = func(name string) (string, error) {
+		if name == "br" {
+			if sharedBRClient.Available() {
+				return "br", nil
+			}
+			return "", exec.ErrNotFound
+		}
+		return exec.LookPath(name)
+	}
 	runCmd   = func(name string, args ...string) ([]byte, error) {
+		if name == "br" {
+			result, err := sharedBRClient.Run(context.Background(), brclient.Invocation{Args: args})
+			if err != nil {
+				return append(result.Stdout, result.Stderr...), err
+			}
+			return result.Stdout, nil
+		}
 		return exec.Command(name, args...).Output()
 	}
 )
