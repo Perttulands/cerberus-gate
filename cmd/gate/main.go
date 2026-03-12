@@ -98,7 +98,7 @@ func runCheck(ctx context.Context, args []string) int {
 		return 1
 	}
 
-	citizen = resolveCitizen(citizen)
+	citizen = resolveCitizen(citizen, repoPath)
 
 	v := pipeline.Run(ctx, repoPath, level, citizen)
 
@@ -149,7 +149,7 @@ func runHealth(ctx context.Context, args []string) int {
 		i++
 	}
 
-	citizen = resolveCitizen(citizen)
+	citizen = resolveCitizen(citizen, repoPath)
 	v := pipeline.Run(ctx, repoPath, pipeline.LevelQuick, citizen)
 
 	if jsonOutput {
@@ -233,7 +233,7 @@ func runCity(ctx context.Context, args []string) int {
 		return city.ExitInvalid
 	}
 
-	citizen = resolveCitizen(citizen)
+	citizen = resolveCitizen(citizen, repoPath)
 
 	v := city.Run(ctx, repoPath, city.Options{
 		InstallAt:         installAt,
@@ -331,7 +331,7 @@ func runHistory(args []string) int {
 	return 0
 }
 
-func resolveCitizen(explicit string) string {
+func resolveCitizen(explicit, repoPath string) string {
 	explicit = strings.TrimSpace(explicit)
 	if explicit != "" {
 		return explicit
@@ -342,7 +342,7 @@ func resolveCitizen(explicit string) string {
 			return envVal
 		}
 	}
-	if gitName := gitUserName(); gitName != "" {
+	if gitName := gitUserName(repoPath); gitName != "" {
 		return gitName
 	}
 	return "unknown"
@@ -448,8 +448,12 @@ func printPrettyCity(v city.Verdict) {
 	fmt.Println()
 }
 
-func gitUserName() string {
-	out, err := exec.Command("git", "config", "user.name").Output()
+func gitUserName(repoPath string) string {
+	cmd := exec.Command("git", "config", "user.name")
+	if strings.TrimSpace(repoPath) != "" {
+		cmd.Dir = repoPath
+	}
+	out, err := cmd.Output()
 	if err != nil {
 		return ""
 	}

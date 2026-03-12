@@ -86,7 +86,7 @@ gate check <repo-path> [flags]
 - `1` — one or more gates fail
 - `2` — reserved (`ExitReview`: warnings present but no hard failures); not currently emitted by the check pipeline
 
-**Citizen resolution** (when `--citizen` is omitted): `POLIS_CITIZEN` env var → `git config user.name` → literal `unknown`.
+**Citizen resolution** (when `--citizen` is omitted): `POLIS_CITIZEN` env var → `git config user.name` in the target repo → literal `unknown`.
 
 ---
 

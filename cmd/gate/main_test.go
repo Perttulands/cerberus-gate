@@ -52,14 +52,14 @@ func TestValidateFilterValue(t *testing.T) {
 
 func TestResolveCitizen(t *testing.T) {
 	t.Run("explicit value wins", func(t *testing.T) {
-		got := resolveCitizen("alice")
+		got := resolveCitizen("alice", "")
 		if got != "alice" {
 			t.Fatalf("got %q, want %q", got, "alice")
 		}
 	})
 
 	t.Run("trims explicit whitespace", func(t *testing.T) {
-		got := resolveCitizen("  bob  ")
+		got := resolveCitizen("  bob  ", "")
 		if got != "bob" {
 			t.Fatalf("got %q, want %q", got, "bob")
 		}
@@ -67,7 +67,7 @@ func TestResolveCitizen(t *testing.T) {
 
 	t.Run("env var when explicit empty", func(t *testing.T) {
 		t.Setenv("POLIS_CITIZEN", "env-user")
-		got := resolveCitizen("")
+		got := resolveCitizen("", "")
 		if got != "env-user" {
 			t.Fatalf("got %q, want %q", got, "env-user")
 		}
@@ -75,19 +75,59 @@ func TestResolveCitizen(t *testing.T) {
 
 	t.Run("env var trimmed", func(t *testing.T) {
 		t.Setenv("POLIS_CITIZEN", "  spaced  ")
-		got := resolveCitizen("")
+		got := resolveCitizen("", "")
 		if got != "spaced" {
 			t.Fatalf("got %q, want %q", got, "spaced")
 		}
 	})
 
-	t.Run("empty env falls through", func(t *testing.T) {
+	t.Run("git config is resolved from target repo", func(t *testing.T) {
+		targetRepo := t.TempDir()
+		cwdRepo := t.TempDir()
+		mustRunGit(t, targetRepo, "init")
+		mustRunGit(t, targetRepo, "config", "user.email", "target@example.com")
+		mustRunGit(t, targetRepo, "config", "user.name", "target-user")
+		mustRunGit(t, cwdRepo, "init")
+		mustRunGit(t, cwdRepo, "config", "user.email", "cwd@example.com")
+		mustRunGit(t, cwdRepo, "config", "user.name", "cwd-user")
+
+		oldWd, err := os.Getwd()
+		if err != nil {
+			t.Fatalf("getwd: %v", err)
+		}
+		if err := os.Chdir(cwdRepo); err != nil {
+			t.Fatalf("chdir: %v", err)
+		}
+		defer func() {
+			if err := os.Chdir(oldWd); err != nil {
+				t.Fatalf("restore cwd: %v", err)
+			}
+		}()
+
 		t.Setenv("POLIS_CITIZEN", "")
-		// Will fall through to git user.name or "unknown"
-		got := resolveCitizen("")
-		// We can't predict git config, but it shouldn't be empty
-		if got == "" {
-			t.Fatal("resolveCitizen should never return empty string")
+		got := resolveCitizen("", targetRepo)
+		if got != "target-user" {
+			t.Fatalf("got %q, want %q", got, "target-user")
+		}
+	})
+
+	t.Run("falls back to unknown when no explicit env or git identity exists", func(t *testing.T) {
+		repo := t.TempDir()
+		mustRunGit(t, repo, "init")
+		emptyGlobal := filepath.Join(t.TempDir(), "empty.gitconfig")
+		if err := os.WriteFile(emptyGlobal, nil, 0o644); err != nil {
+			t.Fatalf("write empty global config: %v", err)
+		}
+
+		t.Setenv("POLIS_CITIZEN", "")
+		t.Setenv("HOME", t.TempDir())
+		t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+		t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
+		t.Setenv("GIT_CONFIG_GLOBAL", emptyGlobal)
+
+		got := resolveCitizen("", repo)
+		if got != "unknown" {
+			t.Fatalf("got %q, want %q", got, "unknown")
 		}
 	})
 }
