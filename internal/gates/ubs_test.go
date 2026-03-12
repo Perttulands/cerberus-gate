@@ -1,8 +1,20 @@
 package gates
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 )
+
+func readUBSFixture(t *testing.T, name string) string {
+	t.Helper()
+	path := filepath.Join("testdata", "ubs", name)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read fixture %s: %v", path, err)
+	}
+	return string(data)
+}
 
 func TestParseUBSOutput_WithErrors(t *testing.T) {
 	output := `{
@@ -116,26 +128,7 @@ func TestParseUBSOutput_FullJSONWithScanners(t *testing.T) {
 }
 
 func TestParseUBSOutput_BannerThenJSON(t *testing.T) {
-	// Simulates real UBS output with banner lines before JSON.
-	output := "\u2139 Created filtered scan workspace at /tmp/scan\nUBS Meta-Runner v5.0.7  2026-02-25 22:19:08\nProject: /home/user/proj\nFormat:  json\nDetected: golang\nScanning golang...\nFinished golang (0s)\n" +
-		`{
-  "project": "/home/user/proj",
-  "scanners": [
-    {
-      "files": 10,
-      "critical": 3,
-      "warning": 2,
-      "info": 50,
-      "language": "golang"
-    }
-  ],
-  "totals": {
-    "critical": 3,
-    "warning": 2,
-    "info": 50,
-    "files": 10
-  }
-}`
+	output := readUBSFixture(t, "banner_then_json.txt")
 
 	f := parseUBSOutput(output)
 	if f.Errors != 3 {
@@ -150,19 +143,7 @@ func TestParseUBSOutput_BannerThenJSON(t *testing.T) {
 }
 
 func TestParseUBSOutput_ScannersWithoutTotals(t *testing.T) {
-	// Edge case: totals are all zero but scanners have data.
-	output := `{
-  "scanners": [
-    {"critical": 1, "warning": 2, "info": 10, "language": "golang"},
-    {"critical": 0, "warning": 1, "info": 5, "language": "python"}
-  ],
-  "totals": {
-    "critical": 0,
-    "warning": 0,
-    "info": 0,
-    "files": 0
-  }
-}`
+	output := readUBSFixture(t, "scanners_without_totals.txt")
 
 	f := parseUBSOutput(output)
 	// Totals are zero but scanners have data — we sum from scanners.

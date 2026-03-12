@@ -1,8 +1,20 @@
 package gates
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 )
+
+func readTruthsayerFixture(t *testing.T, name string) string {
+	t.Helper()
+	path := filepath.Join("testdata", "truthsayer", name)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read fixture %s: %v", path, err)
+	}
+	return string(data)
+}
 
 func TestParseTruthsayerOutput_JSON(t *testing.T) {
 	output := `{
@@ -161,17 +173,11 @@ Another trailing line`
 }
 
 func TestParseTruthsayerOutput_BannerThenJSON(t *testing.T) {
-	// Simulates output with multiple non-JSON lines then the JSON blob.
-	output := `truthsayer v3.2.1
-scanning 42 files...
-language: go
-{
-  "summary": {"errors": 2, "warnings": 0, "info": 7}
-}`
+	output := readTruthsayerFixture(t, "banner_then_json.txt")
 
 	f := parseTruthsayerOutput(output)
-	if f.Errors != 2 || f.Warnings != 0 || f.Info != 7 {
-		t.Errorf("got %+v, want errors=2 warnings=0 info=7", f)
+	if f.Errors != 1 || f.Warnings != 1 || f.Info != 1 {
+		t.Errorf("got %+v, want errors=1 warnings=1 info=1", f)
 	}
 }
 
@@ -187,5 +193,14 @@ WARN minor.thing`
 	}
 	if f.Warnings != 1 {
 		t.Errorf("expected 1 warning from fallback, got %d", f.Warnings)
+	}
+}
+
+func TestParseTruthsayerOutput_FixtureTextSummary(t *testing.T) {
+	output := readTruthsayerFixture(t, "text_summary.txt")
+
+	f := parseTruthsayerOutput(output)
+	if f.Errors != 2 || f.Warnings != 3 || f.Info != 4 {
+		t.Errorf("got %+v, want errors=2 warnings=3 info=4", f)
 	}
 }

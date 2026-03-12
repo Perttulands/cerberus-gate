@@ -1,0 +1,40 @@
+truthsayer v3.2.1
+scanning 42 files...
+language: go
+{
+  "version": "1",
+  "scan_time": "2026-02-25T20:19:07Z",
+  "path": ".",
+  "duration_ms": 21,
+  "findings": [
+    {
+      "rule": "trace-gaps.no-stderr-capture",
+      "severity": "error",
+      "file": "cmd/gate/main.go",
+      "line": 382,
+      "message": "exec.Command used without stderr capture"
+    },
+    {
+      "rule": "bad-defaults.magic-number",
+      "severity": "warning",
+      "file": "internal/gates/lint.go",
+      "line": 63,
+      "message": "Magic number used directly"
+    },
+    {
+      "rule": "trace-gaps.long-function-no-log",
+      "severity": "info",
+      "file": "internal/gates/lint.go",
+      "line": 20,
+      "message": "Function DetectLinters has no logging"
+    }
+  ],
+  "summary": {
+    "total": 3,
+    "errors": 1,
+    "warnings": 1,
+    "info": 1,
+    "files_scanned": 19,
+    "duration_ms": 21
+  }
+}

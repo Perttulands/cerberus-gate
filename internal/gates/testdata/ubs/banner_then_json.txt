@@ -1,0 +1,25 @@
+ℹ Created filtered scan workspace at /tmp/scan
+UBS Meta-Runner v5.0.7  2026-02-25 22:19:08
+Project: /home/user/proj
+Format:  json
+Detected: golang
+Scanning golang...
+Finished golang (0s)
+{
+  "project": "/home/user/proj",
+  "scanners": [
+    {
+      "files": 10,
+      "critical": 3,
+      "warning": 2,
+      "info": 50,
+      "language": "golang"
+    }
+  ],
+  "totals": {
+    "critical": 3,
+    "warning": 2,
+    "info": 50,
+    "files": 10
+  }
+}
