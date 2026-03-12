@@ -44,6 +44,12 @@ Quality gate CLI for Polis city tools.
 - No fuzz testing on parsers
 - E2E tests add ~7s to suite due to real `go test`/`go vet` execution
 
+## Phase 1 D2 Contract Inventory
+
+- `gate -> truthsayer`: binary-level contract now pinned by a CLI E2E test that verifies `truthsayer scan . --format json` and JSON findings propagation.
+- `gate -> ubs`: binary-level contract now pinned by the same CLI E2E test for standard-level diff invocation `ubs --diff --format=json .`; diff fallback remains covered in `internal/gates/gates_test.go`.
+- `orbit -> gate health`: binary-level JSON/exit contract is covered for a failing repo, asserting `gate check --level quick --json` exits `1` while still returning machine-readable verdict output.
+
 ### What Would Get This to A (22+)
 1. Fuzz testing for parseTruthsayerOutput and parseUBSOutput
 2. E2E test for `gate history` with a mocked `br` binary
@@ -57,6 +63,7 @@ Quality gate CLI for Polis city tools.
 cmd/gate/main_test.go
   - Argument parsing: flag errors, missing repo, unknown command
   - E2E: runCheck passing/failing Go project (JSON + pretty output)
+  - Binary contract: real `gate` executable with fake `truthsayer`/`ubs` binaries and JSON health exit contract
   - E2E: runCity with real git repo + city.toml
   - Output formatting: printPretty (pass/fail/skip/bead), printPrettyCity (pass/warn/fail/bead)
 

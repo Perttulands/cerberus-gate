@@ -73,18 +73,14 @@ func TestRun_StandardLevel_IncludesTruthsayerAndUBS(t *testing.T) {
 	}
 }
 
-func TestRun_DeepLevel_IncludesRisk(t *testing.T) {
+func TestRun_DeepLevel_DoesNotIncludePlaceholderRisk(t *testing.T) {
 	dir := t.TempDir()
 	v := Run(context.Background(), dir, LevelDeep, "tester")
 
-	hasRisk := false
 	for _, g := range v.Gates {
 		if g.Name == "risk" {
-			hasRisk = true
+			t.Fatal("deep level should not include placeholder risk gate")
 		}
-	}
-	if !hasRisk {
-		t.Error("deep level should include risk gate")
 	}
 }
 

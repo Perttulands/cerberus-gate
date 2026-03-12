@@ -42,22 +42,35 @@ func Run(ctx context.Context, repoPath, level, citizen string) verdict.Verdict {
 
 	repoName := filepath.Base(absPath)
 	var results []verdict.GateResult
+	cfg, err := gates.LoadConfig(absPath)
+	if err != nil {
+		setupGates := []verdict.GateResult{{Name: "setup", Pass: false, Output: "invalid gate.toml: " + err.Error()}}
+		return verdict.Verdict{
+			Pass:     false,
+			Score:    verdict.ComputeScore(setupGates),
+			Level:    level,
+			Citizen:  citizen,
+			Repo:     repoName,
+			ExitCode: verdict.ExitFail,
+			Gates:    setupGates,
+		}
+	}
 
 	// Quick: tests + lint
-	testResult := gates.RunTests(ctx, absPath, 120)
+	testResult := gates.RunTests(ctx, absPath, 120, cfg)
 	results = append(results, testResult)
 
-	lintResults := gates.RunLint(ctx, absPath, 60)
+	lintResults := gates.RunLint(ctx, absPath, 60, cfg)
 	results = append(results, lintResults...)
 
 	// Standard: + truthsayer + ubs
 	if level == LevelStandard || level == LevelDeep {
 		if level == LevelStandard {
 			// PR-friendly gate: changed-lines/files focus.
-			tsResult := gates.RunTruthsayerCI(ctx, absPath, 60)
+			tsResult := gates.RunTruthsayerCI(ctx, absPath, 60, cfg)
 			results = append(results, tsResult)
 
-			ubsResult := gates.RunUBSDiff(ctx, absPath, 60)
+			ubsResult := gates.RunUBSDiff(ctx, absPath, 60, cfg)
 			results = append(results, ubsResult)
 		} else {
 			// Deep gate: full scans.
@@ -67,12 +80,6 @@ func Run(ctx context.Context, repoPath, level, citizen string) verdict.Verdict {
 			ubsResult := gates.RunUBS(ctx, absPath, 60)
 			results = append(results, ubsResult)
 		}
-	}
-
-	// Deep: + risk scoring (placeholder for now)
-	if level == LevelDeep {
-		riskResult := verdict.GateResult{Name: "risk", Pass: true, Output: "risk scoring not yet implemented", DurationMs: 0}
-		results = append(results, riskResult)
 	}
 
 	// Compute overall pass/fail

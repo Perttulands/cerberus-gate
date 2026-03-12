@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"os"
 	"os/exec"
@@ -248,6 +249,93 @@ func mustRunGit(t *testing.T, dir string, args ...string) {
 	}
 }
 
+func buildGateBinary(t *testing.T) string {
+	t.Helper()
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+
+	bin := filepath.Join(t.TempDir(), "gate-test")
+	cmd := exec.Command("go", "build", "-o", bin, ".")
+	cmd.Dir = wd
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("go build gate binary failed: %v (%s)", err, string(out))
+	}
+	return bin
+}
+
+func writeExecutable(t *testing.T, path, content string) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte(content), 0o755); err != nil {
+		t.Fatalf("write executable %s: %v", path, err)
+	}
+}
+
+func runGateBinary(t *testing.T, bin string, env []string, args ...string) (int, string) {
+	t.Helper()
+	cmd := exec.Command(bin, args...)
+	cmd.Env = env
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		return 0, string(out)
+	}
+
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		return exitErr.ExitCode(), string(out)
+	}
+
+	t.Fatalf("run gate binary %v failed: %v (%s)", args, err, string(out))
+	return 0, ""
+}
+
+func runGateBinaryInDir(t *testing.T, bin, dir string, env []string, args ...string) (int, string) {
+	t.Helper()
+	cmd := exec.Command(bin, args...)
+	cmd.Dir = dir
+	cmd.Env = env
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		return 0, string(out)
+	}
+
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		return exitErr.ExitCode(), string(out)
+	}
+
+	t.Fatalf("run gate binary in %s %v failed: %v (%s)", dir, args, err, string(out))
+	return 0, ""
+}
+
+func contractPathEnv(t *testing.T, extraDir string) []string {
+	t.Helper()
+	goBin, err := exec.LookPath("go")
+	if err != nil {
+		t.Fatalf("lookpath go: %v", err)
+	}
+
+	pathValue := strings.Join([]string{extraDir, filepath.Dir(goBin), "/usr/bin", "/bin"}, string(os.PathListSeparator))
+	return []string{
+		"PATH=" + pathValue,
+		"POLIS_CITIZEN=contract-user",
+		"HOME=" + t.TempDir(),
+	}
+}
+
+func gateByName(t *testing.T, gates []verdict.GateResult, name string) verdict.GateResult {
+	t.Helper()
+	for _, g := range gates {
+		if g.Name == name {
+			return g
+		}
+	}
+	t.Fatalf("missing gate %q in %+v", name, gates)
+	return verdict.GateResult{}
+}
+
 // --- E2E: runCheck ---
 
 func TestRunCheck_E2E_PassingGoProject(t *testing.T) {
@@ -322,6 +410,156 @@ func TestRunCheck_E2E_PrettyOutput(t *testing.T) {
 	}
 	if !strings.Contains(output, "test-user") {
 		t.Errorf("expected citizen in output")
+	}
+}
+
+func TestRunCheck_E2E_BinaryStandardScannerContract(t *testing.T) {
+	repo := t.TempDir()
+	writeTestFile(t, repo, "go.mod", "module contractrepo\n\ngo 1.21\n")
+	writeTestFile(t, repo, "main.go", "package main\nfunc main() {}\n")
+	writeTestFile(t, repo, "main_test.go", "package main\nimport \"testing\"\nfunc TestPass(t *testing.T) {}\n")
+
+	fakeBin := t.TempDir()
+	invocations := filepath.Join(t.TempDir(), "scanners.log")
+	writeExecutable(t, filepath.Join(fakeBin, "truthsayer"), `#!/bin/sh
+printf 'truthsayer:%s\n' "$*" >> "`+invocations+`"
+cat <<'EOF'
+{"findings":[],"summary":{"errors":0,"warnings":1,"info":2}}
+EOF
+`)
+	writeExecutable(t, filepath.Join(fakeBin, "ubs"), `#!/bin/sh
+printf 'ubs:%s\n' "$*" >> "`+invocations+`"
+cat <<'EOF'
+{"scanners":[],"totals":{"critical":0,"warning":2,"info":3,"files":4}}
+EOF
+`)
+
+	code, output := runGateBinary(
+		t,
+		buildGateBinary(t),
+		contractPathEnv(t, fakeBin),
+		"check", repo, "--level", "standard", "--json",
+	)
+	if code != 0 {
+		t.Fatalf("expected exit 0, got %d (%s)", code, output)
+	}
+
+	var v verdict.Verdict
+	if err := json.Unmarshal([]byte(strings.TrimSpace(output)), &v); err != nil {
+		t.Fatalf("parse gate JSON: %v\nraw: %s", err, output)
+	}
+	if !v.Pass {
+		t.Fatalf("expected pass verdict, got %+v", v)
+	}
+
+	truthsayer := gateByName(t, v.Gates, "truthsayer")
+	if truthsayer.Findings == nil || truthsayer.Findings.Warnings != 1 || truthsayer.Findings.Info != 2 {
+		t.Fatalf("unexpected truthsayer findings: %+v", truthsayer.Findings)
+	}
+
+	ubs := gateByName(t, v.Gates, "ubs")
+	if ubs.Findings == nil || ubs.Findings.Warnings != 2 || ubs.Findings.Info != 3 {
+		t.Fatalf("unexpected ubs findings: %+v", ubs.Findings)
+	}
+
+	logData, err := os.ReadFile(invocations)
+	if err != nil {
+		t.Fatalf("read scanner log: %v", err)
+	}
+	logText := string(logData)
+	if !strings.Contains(logText, "truthsayer:ci .") {
+		t.Fatalf("expected truthsayer ci contract, got %q", logText)
+	}
+	if !strings.Contains(logText, "ubs:--diff --format=json .") {
+		t.Fatalf("expected ubs diff contract, got %q", logText)
+	}
+}
+
+func TestRunCheck_E2E_BinaryJSONHealthContract_Failure(t *testing.T) {
+	repo := t.TempDir()
+	writeTestFile(t, repo, "go.mod", "module healthcontract\n\ngo 1.21\n")
+	writeTestFile(t, repo, "main.go", "package main\nfunc main() {}\n")
+	writeTestFile(t, repo, "main_test.go", "package main\nimport \"testing\"\nfunc TestFail(t *testing.T) { t.Fatal(\"boom\") }\n")
+
+	code, output := runGateBinary(
+		t,
+		buildGateBinary(t),
+		contractPathEnv(t, t.TempDir()),
+		"check", repo, "--level", "quick", "--json",
+	)
+	if code != 1 {
+		t.Fatalf("expected exit 1, got %d (%s)", code, output)
+	}
+
+	var v verdict.Verdict
+	if err := json.Unmarshal([]byte(strings.TrimSpace(output)), &v); err != nil {
+		t.Fatalf("parse gate JSON: %v\nraw: %s", err, output)
+	}
+	if v.Pass {
+		t.Fatalf("expected failing verdict, got %+v", v)
+	}
+	if v.ExitCode != 1 {
+		t.Fatalf("expected exit_code 1, got %d", v.ExitCode)
+	}
+	if v.Level != "quick" {
+		t.Fatalf("expected level quick, got %q", v.Level)
+	}
+
+	testsGate := gateByName(t, v.Gates, "tests")
+	if testsGate.Pass {
+		t.Fatalf("expected tests gate to fail, got %+v", testsGate)
+	}
+}
+
+func TestRunHealth_E2E_BinaryDefaultRepoContract(t *testing.T) {
+	repo := t.TempDir()
+	writeTestFile(t, repo, "go.mod", "module healthpass\n\ngo 1.21\n")
+	writeTestFile(t, repo, "main.go", "package main\nfunc main() {}\n")
+
+	code, output := runGateBinaryInDir(
+		t,
+		buildGateBinary(t),
+		repo,
+		contractPathEnv(t, t.TempDir()),
+		"health",
+	)
+	if code != 0 {
+		t.Fatalf("expected exit 0, got %d (%s)", code, output)
+	}
+	if strings.TrimSpace(output) != "healthy" {
+		t.Fatalf("expected healthy output, got %q", output)
+	}
+}
+
+func TestRunHealth_E2E_JSONFailureContract(t *testing.T) {
+	repo := t.TempDir()
+	writeTestFile(t, repo, "go.mod", "module healthfail\n\ngo 1.21\n")
+	writeTestFile(t, repo, "main.go", "package main\nfunc main() {}\n")
+	writeTestFile(t, repo, "main_test.go", "package main\nimport \"testing\"\nfunc TestFail(t *testing.T) { t.Fatal(\"boom\") }\n")
+
+	code, output := runGateBinary(
+		t,
+		buildGateBinary(t),
+		contractPathEnv(t, t.TempDir()),
+		"health", repo, "--json",
+	)
+	if code != 1 {
+		t.Fatalf("expected exit 1, got %d (%s)", code, output)
+	}
+
+	var v verdict.Verdict
+	if err := json.Unmarshal([]byte(strings.TrimSpace(output)), &v); err != nil {
+		t.Fatalf("parse gate health JSON: %v\nraw: %s", err, output)
+	}
+	if v.Pass {
+		t.Fatalf("expected failing health verdict, got %+v", v)
+	}
+	if v.Level != "quick" {
+		t.Fatalf("expected level quick, got %q", v.Level)
+	}
+	testsGate := gateByName(t, v.Gates, "tests")
+	if testsGate.Pass {
+		t.Fatalf("expected tests gate to fail, got %+v", testsGate)
 	}
 }
 
@@ -519,9 +757,9 @@ func TestPrintPrettyCity_FailVerdict(t *testing.T) {
 
 func TestPrintPrettyCity_WithBeadID(t *testing.T) {
 	v := city.Verdict{
-		Status: "pass",
-		Repo:   "bead-city",
-		Bead:   "pol-99",
+		Status:  "pass",
+		Repo:    "bead-city",
+		Bead:    "pol-99",
 		Summary: city.Summary{Pass: 1},
 	}
 

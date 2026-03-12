@@ -10,7 +10,11 @@ import (
 
 // DetectTestSuite returns the command and args to run tests for the repo at dir.
 // Returns nil if no known test framework is detected.
-func DetectTestSuite(dir string) []string {
+func DetectTestSuite(dir string, cfg *Config) []string {
+	if cfg != nil && len(cfg.Check.Test) > 0 {
+		return cfg.Check.Test
+	}
+
 	// Go
 	if fileExists(filepath.Join(dir, "go.mod")) {
 		return []string{"go", "test", "./..."}
@@ -36,8 +40,8 @@ func DetectTestSuite(dir string) []string {
 }
 
 // RunTests detects and runs the test suite for the repo at dir.
-func RunTests(ctx context.Context, dir string, timeoutSec int) verdict.GateResult {
-	cmd := DetectTestSuite(dir)
+func RunTests(ctx context.Context, dir string, timeoutSec int, cfg *Config) verdict.GateResult {
+	cmd := DetectTestSuite(dir, cfg)
 	if cmd == nil {
 		return verdict.GateResult{Name: "tests", Pass: true, Output: "no test suite detected"}
 	}

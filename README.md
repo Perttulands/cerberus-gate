@@ -50,6 +50,9 @@ gate check . --json
 # Run quick check (tests + lint only)
 gate check . --level quick
 
+# Probe current repo health without creating a bead
+gate health
+
 # Validate city contract
 gate city . --install-at /usr/local/share/myapp
 
@@ -76,13 +79,33 @@ gate check <repo-path> [flags]
 **Gate levels:**
 - `quick`: tests + all detected lint gates
 - `standard`: quick + truthsayer + ubs scans
-- `deep`: standard + risk gate (placeholder — always passes with message `risk scoring not yet implemented`)
+- `deep`: standard + full `truthsayer` and `ubs` scans
 
 **Exit codes:**
 - `0` — all non-skipped gates pass
 - `1` — one or more gates fail
 
 **Citizen resolution** (when `--citizen` is omitted): `POLIS_CITIZEN` env var → `git config user.name` → literal `unknown`.
+
+---
+
+### `gate health [repo-path] [flags]`
+
+Run the quick gate pipeline as a lightweight health probe without recording a bead.
+
+```
+gate health [repo-path] [flags]
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `repo-path` | `.` | Repo to probe |
+| `--json` | | Emit the quick verdict JSON to stdout |
+| `--citizen <name>` | (see above) | Actor override used for the verdict metadata |
+
+**Exit codes:**
+- `0` — repo is healthy under the quick gate
+- `1` — one or more quick gates failed
 
 ---
 
@@ -237,7 +260,7 @@ fallback = "defaults"                # one of: defaults, fail, env:<VAR>
 ✅ `gate city` — boundary, standalone, hooks, and split checks all functional
 ✅ Bead integration — failure tracking with deduplication and auto-close on recovery
 ✅ `gate history` — queries prior gate records when `br` is available
-⚠️ `deep` level `risk` gate is a placeholder — always passes with `risk scoring not yet implemented`
+⚠️ `deep` currently means full scanners only; no separate risk verdict is emitted until that check is real
 ⚠️ `gate history` requires `br` on PATH; unavailable otherwise
 ⚠️ `truthsayer` and `ubs` gates silently skip (pass) when their binaries are absent — gate won't tell you it's not scanning
 ⚠️ Exit code 2 (`ExitReview`) exists in the codebase but is not emitted by the check pipeline

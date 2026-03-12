@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -26,26 +27,31 @@ type truthsayerReport struct {
 // Truthsayer is optional — if not installed, the gate passes with skipped=true.
 // Pass criteria: zero critical (error) findings.
 func RunTruthsayer(ctx context.Context, dir string, timeoutSec int) verdict.GateResult {
-	return runTruthsayer(ctx, dir, timeoutSec)
+	return runTruthsayer(ctx, dir, timeoutSec, false, nil)
 }
 
 // RunTruthsayerCI runs truthsayer in CI mode (changed lines/files focus).
-// Note: truthsayer "ci" subcommand does not support --format json, so this
-// currently behaves identically to RunTruthsayer (full scan with JSON output).
-func RunTruthsayerCI(ctx context.Context, dir string, timeoutSec int) verdict.GateResult {
-	return runTruthsayer(ctx, dir, timeoutSec)
+func RunTruthsayerCI(ctx context.Context, dir string, timeoutSec int, cfg *Config) verdict.GateResult {
+	return runTruthsayer(ctx, dir, timeoutSec, true, cfg)
 }
 
-func runTruthsayer(ctx context.Context, dir string, timeoutSec int) verdict.GateResult {
+func runTruthsayer(ctx context.Context, dir string, timeoutSec int, ciMode bool, cfg *Config) verdict.GateResult {
 	if timeoutSec <= 0 {
 		timeoutSec = 60
 	}
 
 	start := time.Now()
-
-	// Always request JSON output. The "ci" subcommand does not support
-	// --format json, so we use "scan --format json" for both modes.
 	args := []string{"scan", ".", "--format", "json"}
+	if ciMode {
+		args = []string{"ci", "."}
+	}
+	if cfg != nil {
+		if ciMode && len(cfg.Check.TruthsayerCI) > 0 {
+			args = cfg.Check.TruthsayerCI
+		} else if !ciMode && len(cfg.Check.Truthsayer) > 0 {
+			args = cfg.Check.Truthsayer
+		}
+	}
 	cmdPass, output, err := runCmd(ctx, dir, timeoutSec, "truthsayer", args...)
 	dur := time.Since(start).Milliseconds()
 
@@ -60,6 +66,16 @@ func runTruthsayer(ctx context.Context, dir string, timeoutSec int) verdict.Gate
 	}
 
 	findings := parseTruthsayerOutput(output)
+	if ciMode && !cmdPass && findings.Errors == 0 && findings.Warnings == 0 && findings.Info == 0 {
+		return verdict.GateResult{
+			Name:       "truthsayer",
+			Pass:       true,
+			Skipped:    true,
+			Output:     "truthsayer ci returned no findings (skipped)",
+			DurationMs: dur,
+			Findings:   &findings,
+		}
+	}
 	pass := cmdPass && findings.Errors == 0
 
 	summary := fmt.Sprintf("%d errors, %d warnings, %d info", findings.Errors, findings.Warnings, findings.Info)
@@ -85,6 +101,10 @@ func parseTruthsayerOutput(output string) verdict.Findings {
 	raw := strings.TrimSpace(output)
 	if raw == "" {
 		return f
+	}
+
+	if summary, ok := parseTruthsayerSummary(raw); ok {
+		return summary
 	}
 
 	// Locate the start of the JSON object. Output may contain log lines
@@ -136,4 +156,16 @@ func parseTruthsayerOutput(output string) verdict.Findings {
 		}
 	}
 	return f
+}
+
+var truthsayerSummaryRE = regexp.MustCompile(`Summary:\s+(\d+)\s+errors,\s+(\d+)\s+warnings,\s+(\d+)\s+info`)
+
+func parseTruthsayerSummary(output string) (verdict.Findings, bool) {
+	match := truthsayerSummaryRE.FindStringSubmatch(output)
+	if len(match) != 4 {
+		return verdict.Findings{}, false
+	}
+	var f verdict.Findings
+	_, err := fmt.Sscanf(match[0], "Summary: %d errors, %d warnings, %d info", &f.Errors, &f.Warnings, &f.Info)
+	return f, err == nil
 }

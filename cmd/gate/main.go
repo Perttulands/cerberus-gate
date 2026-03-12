@@ -37,6 +37,9 @@ func run(ctx context.Context, args []string) int {
 	if cmd == "check" {
 		return runCheck(ctx, args[1:])
 	}
+	if cmd == "health" {
+		return runHealth(ctx, args[1:])
+	}
 	if cmd == "city" {
 		return runCity(ctx, args[1:])
 	}
@@ -111,6 +114,67 @@ func runCheck(ctx context.Context, args []string) int {
 		printPretty(v)
 	}
 
+	return v.ExitCode
+}
+
+func runHealth(ctx context.Context, args []string) int {
+	var repoPath, citizen string
+	var jsonOutput bool
+
+	repoPath = "."
+	i := 0
+	for i < len(args) {
+		switch args[i] {
+		case "--json":
+			jsonOutput = true
+		case "--citizen":
+			i++
+			if i >= len(args) {
+				fmt.Fprintln(os.Stderr, "--citizen requires a value")
+				return 1
+			}
+			citizen = args[i]
+		default:
+			if strings.HasPrefix(args[i], "-") {
+				fmt.Fprintf(os.Stderr, "unknown flag: %s\n", args[i])
+				return 1
+			}
+			if repoPath == "." {
+				repoPath = args[i]
+			} else {
+				fmt.Fprintf(os.Stderr, "unexpected extra argument: %s\n", args[i])
+				return 1
+			}
+		}
+		i++
+	}
+
+	citizen = resolveCitizen(citizen)
+	v := pipeline.Run(ctx, repoPath, pipeline.LevelQuick, citizen)
+
+	if jsonOutput {
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		enc.Encode(v)
+		return v.ExitCode
+	}
+
+	if v.Pass {
+		fmt.Fprintln(os.Stdout, "healthy")
+		return verdict.ExitPass
+	}
+
+	var failed []string
+	for _, g := range v.Gates {
+		if !g.Pass && !g.Skipped {
+			failed = append(failed, g.Name)
+		}
+	}
+	if len(failed) == 0 {
+		fmt.Fprintln(os.Stderr, "unhealthy")
+	} else {
+		fmt.Fprintf(os.Stderr, "unhealthy: %s\n", strings.Join(failed, ", "))
+	}
 	return v.ExitCode
 }
 
@@ -300,12 +364,18 @@ func printUsage() {
 
 Usage:
   gate check <repo-path> [flags]
+  gate health [repo-path] [flags]
   gate city <repo-path> [flags]
   gate history [flags]
 
 Check flags:
   --level quick|standard|deep   Check level (default: standard)
   --json                        Output verdict as JSON
+  --citizen <name>              Set actor name
+
+Health flags:
+  [repo-path]                   Repo to probe (default: .)
+  --json                        Output quick verdict as JSON
   --citizen <name>              Set actor name
 
 City flags:

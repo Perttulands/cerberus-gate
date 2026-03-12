@@ -11,7 +11,7 @@ Gate is simple and focused. It does not learn, does not orchestrate, does not de
 ```
 gate check <repo-path>                    # run all gates, default level
 gate check <repo-path> --level quick      # fast pass: tests + lint only
-gate check <repo-path> --level deep       # thorough: + truthsayer + risk scoring
+gate check <repo-path> --level deep       # thorough: full truthsayer + ubs scans
 gate check <repo-path> --json             # machine-readable verdict
 
 gate history <repo-path>                  # past verdicts for this repo

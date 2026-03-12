@@ -10,25 +10,23 @@ import (
 	"polis/gate/internal/verdict"
 )
 
-// linterSpec describes one auto-detected linter.
-type linterSpec struct {
-	name string
-	cmd  []string
-}
-
 // DetectLinters returns all applicable linters for the repo at dir.
-func DetectLinters(dir string) []linterSpec {
-	var linters []linterSpec
+func DetectLinters(dir string, cfg *Config) []LinterSpec {
+	if cfg != nil && len(cfg.Check.Lint) > 0 {
+		return cfg.Check.Lint
+	}
+
+	var linters []LinterSpec
 
 	// Go
 	if fileExists(filepath.Join(dir, "go.mod")) {
-		linters = append(linters, linterSpec{name: "go vet", cmd: []string{"go", "vet", "./..."}})
+		linters = append(linters, LinterSpec{Name: "go vet", Cmd: []string{"go", "vet", "./..."}})
 	}
 
 	// Node/eslint
 	if fileExists(filepath.Join(dir, "package.json")) {
 		if hasESLint(dir) {
-			linters = append(linters, linterSpec{name: "eslint", cmd: []string{"npx", "eslint", "."}})
+			linters = append(linters, LinterSpec{Name: "eslint", Cmd: []string{"npx", "eslint", "."}})
 		}
 	}
 
@@ -37,7 +35,7 @@ func DetectLinters(dir string) []linterSpec {
 	pyDir := filepath.Join(dir, "src")
 	hasPyDir := fileExists(pyDir)
 	if (err == nil && len(pyFiles) > 0) || hasPyDir || fileExists(filepath.Join(dir, "pyproject.toml")) || fileExists(filepath.Join(dir, "setup.py")) {
-		linters = append(linters, linterSpec{name: "ruff", cmd: []string{"ruff", "check", "."}})
+		linters = append(linters, LinterSpec{Name: "ruff", Cmd: []string{"ruff", "check", "."}})
 	}
 
 	// Shell
@@ -47,15 +45,15 @@ func DetectLinters(dir string) []linterSpec {
 		for _, f := range shFiles {
 			args = append(args, f)
 		}
-		linters = append(linters, linterSpec{name: "shellcheck", cmd: append([]string{"shellcheck"}, args...)})
+		linters = append(linters, LinterSpec{Name: "shellcheck", Cmd: append([]string{"shellcheck"}, args...)})
 	}
 
 	return linters
 }
 
 // RunLint detects and runs all applicable linters for the repo at dir.
-func RunLint(ctx context.Context, dir string, timeoutSec int) []verdict.GateResult {
-	specs := DetectLinters(dir)
+func RunLint(ctx context.Context, dir string, timeoutSec int, cfg *Config) []verdict.GateResult {
+	specs := DetectLinters(dir, cfg)
 	if len(specs) == 0 {
 		return []verdict.GateResult{{Name: "lint", Pass: true, Output: "no linters detected"}}
 	}
@@ -66,8 +64,8 @@ func RunLint(ctx context.Context, dir string, timeoutSec int) []verdict.GateResu
 	var results []verdict.GateResult
 	for _, s := range specs {
 		spec := s
-		r := verdict.TimedRun("lint:"+spec.name, func() (bool, string, error) {
-			pass, output, err := runCmd(ctx, dir, timeoutSec, spec.cmd[0], spec.cmd[1:]...)
+		r := verdict.TimedRun("lint:"+spec.Name, func() (bool, string, error) {
+			pass, output, err := runCmd(ctx, dir, timeoutSec, spec.Cmd[0], spec.Cmd[1:]...)
 			return pass, output, err
 		})
 		results = append(results, r)

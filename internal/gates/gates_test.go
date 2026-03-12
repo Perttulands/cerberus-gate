@@ -21,7 +21,7 @@ func mockRunCmd(t *testing.T, fn func(ctx context.Context, dir string, timeoutSe
 
 func TestRunTests_NoSuiteDetected(t *testing.T) {
 	dir := t.TempDir() // empty dir, no go.mod etc.
-	r := RunTests(context.Background(), dir, 30)
+	r := RunTests(context.Background(), dir, 30, nil)
 	if !r.Pass {
 		t.Fatal("expected pass when no test suite detected")
 	}
@@ -44,7 +44,7 @@ func TestRunTests_Pass(t *testing.T) {
 		return true, "ok\ttest\t0.001s", nil
 	})
 
-	r := RunTests(context.Background(), dir, 30)
+	r := RunTests(context.Background(), dir, 30, nil)
 	if !r.Pass {
 		t.Fatal("expected pass")
 	}
@@ -61,7 +61,7 @@ func TestRunTests_Fail(t *testing.T) {
 		return false, "FAIL test 0.001s", nil
 	})
 
-	r := RunTests(context.Background(), dir, 30)
+	r := RunTests(context.Background(), dir, 30, nil)
 	if r.Pass {
 		t.Fatal("expected fail")
 	}
@@ -75,7 +75,7 @@ func TestRunTests_Error(t *testing.T) {
 		return false, "", fmt.Errorf("exec go: file not found")
 	})
 
-	r := RunTests(context.Background(), dir, 30)
+	r := RunTests(context.Background(), dir, 30, nil)
 	if r.Pass {
 		t.Fatal("expected fail on exec error")
 	}
@@ -91,7 +91,7 @@ func TestRunTests_DefaultTimeout(t *testing.T) {
 		return true, "ok", nil
 	})
 
-	RunTests(context.Background(), dir, 0) // zero means use default
+	RunTests(context.Background(), dir, 0, nil) // zero means use default
 	if capturedTimeout != 120 {
 		t.Fatalf("expected default timeout 120, got %d", capturedTimeout)
 	}
@@ -101,7 +101,7 @@ func TestRunTests_DefaultTimeout(t *testing.T) {
 
 func TestRunLint_NoLintersDetected(t *testing.T) {
 	dir := t.TempDir()
-	results := RunLint(context.Background(), dir, 30)
+	results := RunLint(context.Background(), dir, 30, nil)
 	if len(results) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(results))
 	}
@@ -124,7 +124,7 @@ func TestRunLint_GoVetPass(t *testing.T) {
 		return true, "", nil
 	})
 
-	results := RunLint(context.Background(), dir, 30)
+	results := RunLint(context.Background(), dir, 30, nil)
 	if len(results) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(results))
 	}
@@ -144,7 +144,7 @@ func TestRunLint_GoVetFail(t *testing.T) {
 		return false, "main.go:10: unreachable code", nil
 	})
 
-	results := RunLint(context.Background(), dir, 30)
+	results := RunLint(context.Background(), dir, 30, nil)
 	if results[0].Pass {
 		t.Fatal("expected fail")
 	}
@@ -161,7 +161,7 @@ func TestRunLint_MultipleLinters(t *testing.T) {
 		return true, "", nil
 	})
 
-	results := RunLint(context.Background(), dir, 30)
+	results := RunLint(context.Background(), dir, 30, nil)
 	if len(results) < 2 {
 		t.Fatalf("expected at least 2 results (go vet + shellcheck), got %d", len(results))
 	}
@@ -180,7 +180,7 @@ func TestRunLint_DefaultTimeout(t *testing.T) {
 		return true, "", nil
 	})
 
-	RunLint(context.Background(), dir, 0)
+	RunLint(context.Background(), dir, 0, nil)
 	if capturedTimeout != 60 {
 		t.Fatalf("expected default timeout 60, got %d", capturedTimeout)
 	}
@@ -194,7 +194,7 @@ func TestRunLint_Error(t *testing.T) {
 		return false, "", fmt.Errorf("exec go: command not found")
 	})
 
-	results := RunLint(context.Background(), dir, 30)
+	results := RunLint(context.Background(), dir, 30, nil)
 	if results[0].Pass {
 		t.Fatal("expected fail on exec error")
 	}
@@ -271,17 +271,26 @@ func TestRunTruthsayer_CmdFailWithNoErrors(t *testing.T) {
 	}
 }
 
-func TestRunTruthsayerCI_DelegatesToSameImpl(t *testing.T) {
+func TestRunTruthsayerCI_UsesCICommand(t *testing.T) {
 	var called bool
 	mockRunCmd(t, func(ctx context.Context, d string, timeout int, name string, args ...string) (bool, string, error) {
 		called = true
 		if name != "truthsayer" {
 			t.Fatalf("expected truthsayer, got %s", name)
 		}
-		return true, `{"findings":[],"summary":{"errors":0,"warnings":0,"info":0}}`, nil
+		expected := []string{"ci", "."}
+		if len(args) != len(expected) {
+			t.Fatalf("expected args %v, got %v", expected, args)
+		}
+		for i, a := range args {
+			if a != expected[i] {
+				t.Fatalf("arg[%d]: expected %q, got %q", i, expected[i], a)
+			}
+		}
+		return true, "Summary: 0 errors, 0 warnings, 0 info (2 files scanned in 13ms)", nil
 	})
 
-	r := RunTruthsayerCI(context.Background(), t.TempDir(), 30)
+	r := RunTruthsayerCI(context.Background(), t.TempDir(), 30, nil)
 	if !called {
 		t.Fatal("expected runCmd to be called")
 	}
@@ -391,7 +400,7 @@ func TestRunUBSDiff_DiffArgs(t *testing.T) {
 		return true, `{"scanners":[],"totals":{"critical":0,"warning":0,"info":0,"files":1}}`, nil
 	})
 
-	RunUBSDiff(context.Background(), t.TempDir(), 30)
+	RunUBSDiff(context.Background(), t.TempDir(), 30, nil)
 }
 
 func TestRunUBSDiff_FallbackToFullScan(t *testing.T) {
@@ -413,7 +422,7 @@ func TestRunUBSDiff_FallbackToFullScan(t *testing.T) {
 		return true, `{"scanners":[],"totals":{"critical":0,"warning":0,"info":0,"files":1}}`, nil
 	})
 
-	r := RunUBSDiff(context.Background(), t.TempDir(), 30)
+	r := RunUBSDiff(context.Background(), t.TempDir(), 30, nil)
 	if callCount != 2 {
 		t.Fatalf("expected 2 calls (diff + fallback), got %d", callCount)
 	}
@@ -429,7 +438,7 @@ func TestRunUBSDiff_DiffSucceeds(t *testing.T) {
 		return true, `{"scanners":[],"totals":{"critical":0,"warning":0,"info":0,"files":1}}`, nil
 	})
 
-	r := RunUBSDiff(context.Background(), t.TempDir(), 30)
+	r := RunUBSDiff(context.Background(), t.TempDir(), 30, nil)
 	if callCount != 1 {
 		t.Fatalf("expected 1 call (diff succeeded), got %d", callCount)
 	}

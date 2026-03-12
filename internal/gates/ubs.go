@@ -30,15 +30,15 @@ type ubsReport struct {
 // UBS is optional — if not installed, the gate passes with skipped=true.
 // Pass criteria: no critical-level failures in output.
 func RunUBS(ctx context.Context, dir string, timeoutSec int) verdict.GateResult {
-	return runUBS(ctx, dir, timeoutSec, false)
+	return runUBS(ctx, dir, timeoutSec, false, nil)
 }
 
 // RunUBSDiff runs ubs in diff mode (changed files only).
-func RunUBSDiff(ctx context.Context, dir string, timeoutSec int) verdict.GateResult {
-	return runUBS(ctx, dir, timeoutSec, true)
+func RunUBSDiff(ctx context.Context, dir string, timeoutSec int, cfg *Config) verdict.GateResult {
+	return runUBS(ctx, dir, timeoutSec, true, cfg)
 }
 
-func runUBS(ctx context.Context, dir string, timeoutSec int, diffMode bool) verdict.GateResult {
+func runUBS(ctx context.Context, dir string, timeoutSec int, diffMode bool, cfg *Config) verdict.GateResult {
 	if timeoutSec <= 0 {
 		timeoutSec = 60
 	}
@@ -47,6 +47,13 @@ func runUBS(ctx context.Context, dir string, timeoutSec int, diffMode bool) verd
 	args := []string{"--format=json", "."}
 	if diffMode {
 		args = []string{"--diff", "--format=json", "."}
+	}
+	if cfg != nil {
+		if diffMode && len(cfg.Check.UBSDiff) > 0 {
+			args = cfg.Check.UBSDiff
+		} else if !diffMode && len(cfg.Check.UBS) > 0 {
+			args = cfg.Check.UBS
+		}
 	}
 	cmdPass, output, err := runCmd(ctx, dir, timeoutSec, "ubs", args...)
 	if diffMode && err == nil && !cmdPass {
