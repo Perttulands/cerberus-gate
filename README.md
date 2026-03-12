@@ -84,6 +84,7 @@ gate check <repo-path> [flags]
 **Exit codes:**
 - `0` — all non-skipped gates pass
 - `1` — one or more gates fail
+- `2` — reserved (`ExitReview`: warnings present but no hard failures); not currently emitted by the check pipeline
 
 **Citizen resolution** (when `--citizen` is omitted): `POLIS_CITIZEN` env var → `git config user.name` → literal `unknown`.
 
@@ -200,6 +201,34 @@ If no linters are detected, a single pass gate `lint` is emitted with `no linter
 | `POLIS_CITIZEN` | Default citizen identity for bead assignee and verdict field; used when `--citizen` is absent or blank |
 
 The standalone check (`gate city`) runs in an isolated environment. Only these variables are passed through: `PATH`, `HOME`, `TMPDIR`, `LANG`, `LC_ALL`, `TERM`.
+
+### `gate.toml` (consumed by `gate check`)
+
+Optional. Place in the repo root to override auto-detected test, lint, and scan commands. When absent, gate falls back to auto-detection (see tables above). When present, only the fields you set are overridden; omitted fields still auto-detect.
+
+```toml
+[check]
+# Override the test command (replaces auto-detected framework).
+# Each element is an argv token — no shell expansion.
+test = ["go", "test", "-count=1", "./..."]
+
+# Override truthsayer scan command.
+truthsayer    = ["truthsayer", "scan", ".", "--format", "json"]
+truthsayer_ci = ["truthsayer", "scan", ".", "--format", "json", "--ci"]
+
+# Override ubs scan command.
+ubs      = ["ubs", "--format=json", "."]
+ubs_diff = ["ubs", "--format=json", "--diff", "."]
+
+# Override linters. Each entry needs a name and argv.
+[[check.lint]]
+name = "golangci-lint"
+cmd  = ["golangci-lint", "run", "./..."]
+
+[[check.lint]]
+name = "shellcheck"
+cmd  = ["shellcheck", "scripts/deploy.sh"]
+```
 
 ### `city.toml` (consumed by `gate city`)
 
