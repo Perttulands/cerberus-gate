@@ -204,3 +204,70 @@ func TestParseTruthsayerOutput_FixtureTextSummary(t *testing.T) {
 		t.Errorf("got %+v, want errors=2 warnings=3 info=4", f)
 	}
 }
+
+func TestParseTruthsayerOutput_TruncatedJSON(t *testing.T) {
+	// JSON abruptly cut — should fall through to text fallback.
+	output := `{"summary":{"errors":5,"warnin`
+	f := parseTruthsayerOutput(output)
+	// No valid JSON, no text prefixes → all zeros
+	if f.Errors != 0 || f.Warnings != 0 || f.Info != 0 {
+		t.Errorf("truncated JSON should yield zeros, got %+v", f)
+	}
+}
+
+func TestParseTruthsayerOutput_NestedBracesInStrings(t *testing.T) {
+	// JSON with brace-like content in string values.
+	output := `{
+  "summary": {"errors": 2, "warnings": 0, "info": 0},
+  "meta": "file contains { and } chars"
+}`
+	f := parseTruthsayerOutput(output)
+	if f.Errors != 2 {
+		t.Errorf("expected 2 errors, got %d", f.Errors)
+	}
+}
+
+func TestParseTruthsayerOutput_WhitespaceOnly(t *testing.T) {
+	f := parseTruthsayerOutput("   \n\t\n  ")
+	if f.Errors != 0 || f.Warnings != 0 || f.Info != 0 {
+		t.Errorf("whitespace-only should yield zeros, got %+v", f)
+	}
+}
+
+func TestParseTruthsayerOutput_BinaryGarbage(t *testing.T) {
+	// Non-UTF8-safe but still a string — should not panic.
+	output := "some\x00binary\xffgarbage\x01here"
+	f := parseTruthsayerOutput(output)
+	// Should not panic; exact counts don't matter, just no crash.
+	_ = f
+}
+
+func TestParseTruthsayerOutput_MissingSummaryFields(t *testing.T) {
+	// Valid JSON but summary has only errors, missing warnings/info.
+	output := `{"summary": {"errors": 7}}`
+	f := parseTruthsayerOutput(output)
+	if f.Errors != 7 {
+		t.Errorf("expected 7 errors, got %d", f.Errors)
+	}
+	if f.Warnings != 0 || f.Info != 0 {
+		t.Errorf("missing fields should default to 0, got %+v", f)
+	}
+}
+
+func TestParseTruthsayerOutput_EmptyJSONObject(t *testing.T) {
+	output := `{}`
+	f := parseTruthsayerOutput(output)
+	if f.Errors != 0 || f.Warnings != 0 || f.Info != 0 {
+		t.Errorf("empty JSON object should yield zeros, got %+v", f)
+	}
+}
+
+func TestParseTruthsayerOutput_MultipleJSONObjects(t *testing.T) {
+	// Two JSON objects back-to-back — decoder should use only the first.
+	output := `{"summary":{"errors":1,"warnings":0,"info":0}}
+{"summary":{"errors":99,"warnings":99,"info":99}}`
+	f := parseTruthsayerOutput(output)
+	if f.Errors != 1 {
+		t.Errorf("expected 1 error from first object, got %d", f.Errors)
+	}
+}

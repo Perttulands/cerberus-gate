@@ -183,3 +183,69 @@ func TestParseUBSOutput_MalformedJSON(t *testing.T) {
 		t.Errorf("expected 1 warning from icon fallback, got %d", f.Warnings)
 	}
 }
+
+func TestParseUBSOutput_TruncatedJSON(t *testing.T) {
+	output := `{"totals":{"critical":3,"warn`
+	f := parseUBSOutput(output)
+	// Truncated JSON, no icons → all zeros
+	if f.Errors != 0 || f.Warnings != 0 || f.Info != 0 {
+		t.Errorf("truncated JSON should yield zeros, got %+v", f)
+	}
+}
+
+func TestParseUBSOutput_WhitespaceOnly(t *testing.T) {
+	f := parseUBSOutput("   \n\t\n  ")
+	if f.Errors != 0 || f.Warnings != 0 || f.Info != 0 {
+		t.Errorf("whitespace-only should yield zeros, got %+v", f)
+	}
+}
+
+func TestParseUBSOutput_BinaryGarbage(t *testing.T) {
+	output := "some\x00binary\xffgarbage\x01here"
+	f := parseUBSOutput(output)
+	_ = f // should not panic
+}
+
+func TestParseUBSOutput_MissingSummaryFields(t *testing.T) {
+	// Valid JSON with only critical, missing warning/info.
+	output := `{"totals": {"critical": 4}}`
+	f := parseUBSOutput(output)
+	if f.Errors != 4 {
+		t.Errorf("expected 4 critical, got %d", f.Errors)
+	}
+	if f.Warnings != 0 || f.Info != 0 {
+		t.Errorf("missing fields should default to 0, got %+v", f)
+	}
+}
+
+func TestParseUBSOutput_EmptyJSONObject(t *testing.T) {
+	output := `{}`
+	f := parseUBSOutput(output)
+	if f.Errors != 0 || f.Warnings != 0 || f.Info != 0 {
+		t.Errorf("empty JSON object should yield zeros, got %+v", f)
+	}
+}
+
+func TestParseUBSOutput_MultipleJSONObjects(t *testing.T) {
+	output := `{"totals":{"critical":2,"warning":1,"info":0}}
+{"totals":{"critical":99,"warning":99,"info":99}}`
+	f := parseUBSOutput(output)
+	if f.Errors != 2 {
+		t.Errorf("expected 2 critical from first object, got %d", f.Errors)
+	}
+	if f.Warnings != 1 {
+		t.Errorf("expected 1 warning from first object, got %d", f.Warnings)
+	}
+}
+
+func TestParseUBSOutput_IconsWithNoJSON(t *testing.T) {
+	// Pure icon output with no JSON at all.
+	output := "\u2717 memory leak in handler.go:45\n\u2717 unclosed file in server.go:88\n\u26a0 shadowed variable in util.go:12\nclean: parser.go"
+	f := parseUBSOutput(output)
+	if f.Errors != 2 {
+		t.Errorf("expected 2 criticals from icons, got %d", f.Errors)
+	}
+	if f.Warnings != 1 {
+		t.Errorf("expected 1 warning from icons, got %d", f.Warnings)
+	}
+}
