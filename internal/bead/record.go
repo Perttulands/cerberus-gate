@@ -96,24 +96,25 @@ func RecordCity(v city.Verdict, citizen string) string {
 // findOpenFailBead searches for an existing open fail bead for the given repo.
 // For check verdicts pass the level; for city verdicts pass "" (searches kind:city instead).
 func findOpenFailBead(repo, level string) string {
+	// v2 search does not support --label; use text search + status filter
+	// then match labels client-side.
 	args := []string{
 		"search", "gate",
-		"--label", "tool:gate",
-		"--label", "repo:" + repo,
-		"--label", "status:fail",
 		"--status", "open",
 		"--json",
-	}
-	if level != "" {
-		args = append(args, "--label", "level:"+level)
-	} else {
-		args = append(args, "--label", "kind:city")
 	}
 	out, err := runCmd("br", args...)
 	if err != nil {
 		return ""
 	}
-	return parseFirstBeadID(string(out))
+
+	required := []string{"tool:gate", "repo:" + repo, "status:fail"}
+	if level != "" {
+		required = append(required, "level:"+level)
+	} else {
+		required = append(required, "kind:city")
+	}
+	return parseFirstBeadIDWithLabels(string(out), required)
 }
 
 // resolveOpenFailBead finds and closes any open fail bead for the given repo.
@@ -127,7 +128,8 @@ func resolveOpenFailBead(repo, level, summary string) {
 }
 
 type brSearchResult struct {
-	ID string `json:"id"`
+	ID     string   `json:"id"`
+	Labels []string `json:"labels"`
 }
 
 func parseFirstBeadID(jsonOutput string) string {
@@ -141,6 +143,33 @@ func parseFirstBeadID(jsonOutput string) string {
 	return results[0].ID
 }
 
+// parseFirstBeadIDWithLabels returns the first bead ID that has all required labels.
+func parseFirstBeadIDWithLabels(jsonOutput string, requiredLabels []string) string {
+	var results []brSearchResult
+	if err := json.Unmarshal([]byte(jsonOutput), &results); err != nil {
+		return ""
+	}
+	for _, r := range results {
+		if hasAllLabels(r.Labels, requiredLabels) {
+			return r.ID
+		}
+	}
+	return ""
+}
+
+func hasAllLabels(labels, required []string) bool {
+	set := make(map[string]struct{}, len(labels))
+	for _, l := range labels {
+		set[l] = struct{}{}
+	}
+	for _, r := range required {
+		if _, ok := set[r]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
 func createWithBR(title, labels, description, citizen string) string {
 	if _, err := lookPath("br"); err != nil {
 		return ""
@@ -149,8 +178,8 @@ func createWithBR(title, labels, description, citizen string) string {
 		"create",
 		title,
 		"-t", "chore",
-		"-l", labels,
-		"-d", description,
+		"--labels", labels,
+		"--description", description,
 		"--silent",
 	}
 	if citizen != "" && citizen != "unknown" {

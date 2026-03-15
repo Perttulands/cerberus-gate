@@ -344,7 +344,7 @@ func TestRecord_PassClosesOpenFailBead(t *testing.T) {
 	}
 	runCmd = func(name string, args ...string) ([]byte, error) {
 		if len(args) > 0 && args[0] == "search" {
-			return []byte(`[{"id":"pol-old-fail"}]`), nil
+			return []byte(`[{"id":"pol-old-fail","labels":["tool:gate","repo:relay","status:fail","level:standard"]}]`), nil
 		}
 		if len(args) > 0 && args[0] == "close" {
 			closedID = args[1]
@@ -386,7 +386,7 @@ func TestRecord_FailDeduplicatesExistingBead(t *testing.T) {
 	}
 	runCmd = func(name string, args ...string) ([]byte, error) {
 		if len(args) > 0 && args[0] == "search" {
-			return []byte(`[{"id":"pol-existing"}]`), nil
+			return []byte(`[{"id":"pol-existing","labels":["tool:gate","repo:relay","status:fail","level:standard"]}]`), nil
 		}
 		createCalled = true
 		return []byte("should-not-happen\n"), nil
@@ -479,7 +479,7 @@ func TestRecordCity_FailDeduplicates(t *testing.T) {
 	}
 	runCmd = func(name string, args ...string) ([]byte, error) {
 		if len(args) > 0 && args[0] == "search" {
-			return []byte(`[{"id":"pol-city-dup"}]`), nil
+			return []byte(`[{"id":"pol-city-dup","labels":["tool:gate","repo:relay","status:fail","kind:city"]}]`), nil
 		}
 		createCalled = true
 		return []byte("should-not-happen\n"), nil
@@ -507,7 +507,7 @@ func TestRecordCity_PassClosesOpenFailBead(t *testing.T) {
 	}
 	runCmd = func(name string, args ...string) ([]byte, error) {
 		if len(args) > 0 && args[0] == "search" {
-			return []byte(`[{"id":"pol-city-fail"}]`), nil
+			return []byte(`[{"id":"pol-city-fail","labels":["tool:gate","repo:relay","status:fail","kind:city"]}]`), nil
 		}
 		if len(args) > 0 && args[0] == "close" {
 			closedID = args[1]
@@ -555,32 +555,42 @@ func TestParseFirstBeadID(t *testing.T) {
 func TestFindOpenFailBead_SearchLabels(t *testing.T) {
 	defer resetHooksForTest()
 
-	var searchArgs []string
 	lookPath = func(name string) (string, error) {
 		return "/usr/bin/br", nil
 	}
+
+	// v2: search does not use --label flags; labels are filtered client-side.
+	// Verify that search args use --status open (no --label).
+	var searchArgs []string
 	runCmd = func(name string, args ...string) ([]byte, error) {
 		searchArgs = append([]string{}, args...)
 		return []byte("[]"), nil
 	}
 
-	// With level: should include level label
 	findOpenFailBead("relay", "standard")
 	joined := strings.Join(searchArgs, " ")
-	if !strings.Contains(joined, "--label level:standard") {
-		t.Fatalf("expected level label in search, got: %s", joined)
+	if strings.Contains(joined, "--label") {
+		t.Fatalf("v2 search should not use --label, got: %s", joined)
 	}
-	if strings.Contains(joined, "kind:city") {
-		t.Fatalf("level-based search should not include kind:city, got: %s", joined)
+	if !strings.Contains(joined, "--status open") {
+		t.Fatalf("expected --status open in search, got: %s", joined)
 	}
 
-	// Without level: should include kind:city label
-	findOpenFailBead("relay", "")
-	joined = strings.Join(searchArgs, " ")
-	if !strings.Contains(joined, "--label kind:city") {
-		t.Fatalf("expected kind:city label in search, got: %s", joined)
+	// With level: should match bead with matching labels
+	runCmd = func(name string, args ...string) ([]byte, error) {
+		return []byte(`[{"id":"pol-match","labels":["tool:gate","repo:relay","status:fail","level:standard"]},{"id":"pol-nomatch","labels":["tool:gate","repo:other","status:fail"]}]`), nil
 	}
-	if strings.Contains(joined, "level:") {
-		t.Fatalf("city search should not include level label, got: %s", joined)
+	id := findOpenFailBead("relay", "standard")
+	if id != "pol-match" {
+		t.Fatalf("expected pol-match, got %q", id)
+	}
+
+	// Without level: should match kind:city labels
+	runCmd = func(name string, args ...string) ([]byte, error) {
+		return []byte(`[{"id":"pol-city","labels":["tool:gate","repo:relay","status:fail","kind:city"]}]`), nil
+	}
+	id = findOpenFailBead("relay", "")
+	if id != "pol-city" {
+		t.Fatalf("expected pol-city, got %q", id)
 	}
 }
