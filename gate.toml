@@ -1,0 +1,9 @@
+[check]
+
+[[check.lint]]
+name = "go vet"
+cmd = ["go", "vet", "./..."]
+
+[[check.lint]]
+name = "binary freshness"
+cmd = ["bash", "checks/binary-freshness.sh"]

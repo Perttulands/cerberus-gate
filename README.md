@@ -12,20 +12,20 @@ Gate exists because quality checks shouldn't be a ceremony you perform by hand. 
 
 From `agents/hierophant/workspace/incoming/MYTHOLOGY-DRAFT.md`:
 
-`gate` is the Centaur of Polis: the city gatekeeper.
+`gate` is Cerberus of Polis: the three-headed gatekeeper.
 
-- Sigil: horseshoe with a checkmark
-- Shape: unmistakable centaur silhouette (nobody else has four legs)
-- Armor: bronze chest plate engraved with four trials (`lint`, `test`, `scan`, `gate`)
-- Tool: inspection hammer (he taps builds; hollow work fails)
-- Authority: gold merge seal for worthy work, red brand for rejection
+- Sigil: three heads, one seal
+- Shape: hound at the threshold, impossible to mistake
+- Heads: build/lint/test, code truth, and logic bugs
+- Tool: the locked gate itself
+- Authority: unanimous verdict or the gate stays closed
 
 Narrative role:
-- He walks the build sites.
-- He runs the full gauntlet, including Truthsayer.
-- Nothing enters the city without his gold seal.
+- He keeps watch at the gate.
+- He runs the three trials, including Truthsayer and UBS.
+- Nothing enters the city without a unanimous pass.
 
-This is why the command is legible (`gate`) while the identity is mythic (the Centaur).
+This is why the command is legible (`gate`) while the identity is mythic (Cerberus).
 
 ## Installation
 
