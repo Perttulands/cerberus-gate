@@ -1,0 +1,173 @@
+entries:
+  - name: work
+    bins: [work]
+    source: /home/polis/.openclaw/skills/work/SKILL.md
+    targets:
+      - /home/polis/tools/work/AGENTS.md
+      - /home/polis/agents/hermes/skills/work/SKILL.md
+    verify_commands:
+      - "work --help"
+
+  - name: gate
+    bins: [gate]
+    source: /home/polis/.openclaw/skills/gate/SKILL.md
+    targets:
+      - /home/polis/tools/gate/AGENTS.md
+      - /home/polis/agents/hermes/skills/gate/SKILL.md
+    verify_commands:
+      - "gate --help"
+
+  - name: argus
+    bins: [argus]
+    source: /home/polis/.openclaw/skills/argus/SKILL.md
+    targets:
+      - /home/polis/tools/argus/AGENTS.md
+      - /home/polis/agents/hermes/skills/argus/SKILL.md
+    verify_commands:
+      - "argus --help"
+
+  - name: learning-loop
+    bins: [loop]
+    source: /home/polis/.openclaw/skills/learning-loop/SKILL.md
+    targets:
+      - /home/polis/tools/learning-loop/AGENTS.md
+      - /home/polis/agents/hermes/skills/learning-loop/SKILL.md
+    verify_commands:
+      - "loop --help"
+
+  - name: truthsayer
+    bins: [truthsayer]
+    source: /home/polis/.openclaw/skills/truthsayer/SKILL.md
+    targets:
+      - /home/polis/tools/truthsayer/AGENTS.md
+      - /home/polis/agents/hermes/skills/truthsayer/SKILL.md
+    verify_commands:
+      - "truthsayer --help"
+
+  - name: ubs
+    bins: [ubs]
+    source: /home/polis/.openclaw/skills/ubs/SKILL.md
+    targets:
+      - /home/polis/tools/ubs-polis/AGENTS.md
+      - /home/polis/tools/ubs-polis/SKILL.md
+      - /home/polis/agents/hermes/skills/ubs/SKILL.md
+    verify_commands:
+      - "ubs --help"
+
+  - name: relay
+    bins: [relay]
+    source: /home/polis/.openclaw/skills/relay/SKILL.md
+    targets:
+      - /home/polis/agents/hermes/skills/relay/SKILL.md
+      - /home/polis/agents/hestia/skills/relay/SKILL.md
+    verify_commands:
+      - "relay --help"
+
+  - name: senate
+    bins: [senate]
+    source: /home/polis/.openclaw/skills/senate/SKILL.md
+    targets:
+      - /home/polis/agents/hermes/skills/senate/SKILL.md
+    verify_commands:
+      - "senate --help"
+
+  - name: oathkeeper
+    bins: [oathkeeper]
+    source: /home/polis/.openclaw/skills/oathkeeper/SKILL.md
+    targets:
+      - /home/polis/agents/hermes/skills/oathkeeper/SKILL.md
+    verify_commands:
+      - "oathkeeper --help"
+
+  - name: cass
+    bins: [cass]
+    source: /home/polis/.openclaw/skills/cass/SKILL.md
+    targets:
+      - /home/polis/agents/hermes/skills/cass/SKILL.md
+    verify_commands:
+      - "cass --help"
+
+  - name: bv
+    bins: [bv]
+    source: /home/polis/.openclaw/skills/bv/SKILL.md
+    targets:
+      - /home/polis/agents/hermes/skills/bv/SKILL.md
+    verify_commands:
+      - "bv --help"
+
+  - name: rtk
+    bins: [rtk]
+    source: /home/polis/.openclaw/skills/rtk/SKILL.md
+    targets:
+      - /home/polis/agents/hermes/skills/rtk/SKILL.md
+      - /home/polis/.claude/RTK.md
+    verify_commands:
+      - "rtk --help"
+
+  - name: beads
+    bins: [br]
+    source: /home/polis/.openclaw/skills/beads/SKILL.md
+    targets:
+      - /home/polis/agents/hermes/skills/beads/SKILL.md
+    verify_commands:
+      - "br --help"
+
+  - name: prd
+    bins: [chiron]
+    source: /home/polis/.openclaw/skills/prd/SKILL.md
+    targets:
+      - /home/polis/agents/hermes/skills/prd/SKILL.md
+      - /home/polis/tools/chiron/.claude/skills/prd-tasks/SKILL.md
+    verify_commands:
+      - "chiron --help"
+
+  - name: gws
+    bins: [gws]
+    source: /home/polis/.openclaw/skills/gws/SKILL.md
+    targets:
+      - /home/polis/agents/hermes/skills/gws/SKILL.md
+      - /home/polis/tools/gws/skills/gws-shared/SKILL.md
+    verify_commands:
+      - "gws --help"
+
+  - name: agent-status
+    bins: [polis-status]
+    source: /home/polis/.openclaw/skills/agent-status/SKILL.md
+    targets:
+      - /home/polis/tools/utils/polis-status/AGENTS.md
+      - /home/polis/agents/hermes/skills/agent-status/SKILL.md
+    verify_commands:
+      - "polis-status --help"
+
+  - name: quality-gate
+    bins: [gate]
+    source: /home/polis/.openclaw/skills/quality-gate/SKILL.md
+    targets:
+      - /home/polis/agents/hermes/skills/quality-gate/SKILL.md
+    verify_commands:
+      - "gate --help"
+
+  - name: code-review
+    bins: [truthsayer, ubs]
+    source: /home/polis/.openclaw/skills/code-review/SKILL.md
+    targets:
+      - /home/polis/agents/hermes/skills/code-review/SKILL.md
+    verify_commands:
+      - "truthsayer --help"
+      - "ubs --help"
+
+  - name: bd-to-br-migration
+    bins: [br]
+    source: /home/polis/.claude/skills/bd-to-br-migration/SKILL.md
+    targets:
+      - /home/polis/.codex/skills/bd-to-br-migration/SKILL.md
+    verify_commands:
+      - "br --help"
+
+  - name: prd-critique
+    bins: [chiron]
+    source: /home/polis/.openclaw/skills/prd-critique/SKILL.md
+    targets:
+      - /home/polis/agents/hermes/skills/prd-critique/SKILL.md
+    verify_commands:
+      - "chiron --help"
