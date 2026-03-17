@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -69,10 +70,26 @@ func runCatalogCheck(ctx context.Context, args []string) int {
 		return 1
 	}
 
-	results := make([]catalogResult, 0, len(reg.Entries))
+	// Validate entries after decode
+	var valid []registryEntry
+	for _, e := range reg.Entries {
+		if strings.TrimSpace(e.Name) == "" {
+			fmt.Fprintln(os.Stderr, "skipping registry entry with empty name")
+			continue
+		}
+		if len(e.Bins) == 0 && len(e.VerifyCommands) == 0 {
+			fmt.Fprintf(os.Stderr, "warning: entry %q has no bins or verify_commands\n", e.Name)
+		}
+		if len(e.Targets) == 0 {
+			fmt.Fprintf(os.Stderr, "warning: entry %q has no targets\n", e.Name)
+		}
+		valid = append(valid, e)
+	}
+
+	results := make([]catalogResult, 0, len(valid))
 	allPass := true
 
-	for _, e := range reg.Entries {
+	for _, e := range valid {
 		r := checkEntry(ctx, e)
 		if r.Status != "PASS" {
 			allPass = false
@@ -114,10 +131,19 @@ func checkEntry(ctx context.Context, e registryEntry) catalogResult {
 	if r.Status != "BROKEN" {
 		for _, cmd := range e.VerifyCommands {
 			vctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-			c := exec.CommandContext(vctx, "sh", "-c", cmd)
+			argv := strings.Fields(cmd)
+			if len(argv) == 0 {
+				cancel()
+				continue
+			}
+			c := exec.CommandContext(vctx, argv[0], argv[1:]...)
 			if err := c.Run(); err != nil {
 				r.Status = "BROKEN"
-				r.Details = append(r.Details, fmt.Sprintf("verify %q failed: %v", cmd, err))
+				if errors.Is(vctx.Err(), context.DeadlineExceeded) {
+					r.Details = append(r.Details, fmt.Sprintf("verify %q timed out after 5s", cmd))
+				} else {
+					r.Details = append(r.Details, fmt.Sprintf("verify %q failed: %v", cmd, err))
+				}
 			}
 			cancel()
 		}
