@@ -17,6 +17,32 @@ br claim <id>         # Claim work
 br close <id>         # Complete work
 ```
 
+## Subcommands
+
+### catalog-check
+
+Validates cross-runtime skill contracts from a registry.yaml file. Each entry declares binaries, source files, target files, and verify commands that must be present and healthy.
+
+**Usage:**
+```bash
+gate catalog-check [--registry <path>] [--json]
+```
+
+**Flags:**
+- `--registry <path>` — Override the registry file path (default: `/home/polis/tools/gate/registry.yaml`)
+- `--json` — Output results as machine-readable JSON instead of a formatted table
+
+**Output:** Each registry entry gets one of three statuses:
+- **PASS** — Binary on PATH, verify commands succeed, source/target files exist and are non-empty
+- **STALE** — Binary works but source or target files are missing/empty
+- **BROKEN** — Binary missing from PATH or verify command failed
+
+**Exit codes:**
+- `0` — All entries pass
+- `1` — Any entry is STALE or BROKEN
+
+BROKEN entries automatically create beads (via `br`) for tracking.
+
 ## Landing the Plane (Session Completion)
 
 **When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until `git push` succeeds.
