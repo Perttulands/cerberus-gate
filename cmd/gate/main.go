@@ -51,6 +51,9 @@ func run(ctx context.Context, args []string) int {
 	if cmd == "history" {
 		return runHistory(args[1:])
 	}
+	if cmd == "catalog-check" {
+		return runCatalogCheck(ctx, args[1:])
+	}
 
 	fmt.Fprintf(os.Stderr, "unknown command: %s\n", cmd)
 	printUsage()
@@ -376,6 +379,7 @@ Usage:
   gate check <repo-path> [flags]
   gate health [repo-path] [flags]
   gate city <repo-path> [flags]
+  gate catalog-check [flags]
   gate history [flags]
 
 Check flags:
@@ -394,6 +398,10 @@ City flags:
   --standalone-timeout <dur>    Timeout for standalone_check (default: 120s)
   --json                        Output verdict as JSON
   --citizen <name>              Set actor name
+
+Catalog-check flags:
+  --registry <path>             Registry file (default: /home/polis/tools/gate/registry.yaml)
+  --json                        Output results as JSON
 
 History flags:
   --repo <name>                 Filter by repo name

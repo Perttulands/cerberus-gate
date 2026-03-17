@@ -1,6 +1,9 @@
 # github.com/Perttulands/polis-utils v0.0.0-20260313002710-ee11f641d073
 ## explicit; go 1.25.0
 github.com/Perttulands/polis-utils/brclient
+# gopkg.in/yaml.v3 v3.0.1
+## explicit; go 1.15
+gopkg.in/yaml.v3
 # github.com/pelletier/go-toml/v2 v2.2.4
 ## explicit; go 1.21.0
 github.com/pelletier/go-toml/v2
