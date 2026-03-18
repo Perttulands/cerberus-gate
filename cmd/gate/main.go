@@ -62,7 +62,7 @@ func run(ctx context.Context, args []string) int {
 
 func runCheck(ctx context.Context, args []string) int {
 	var repoPath, level, citizen string
-	var jsonOutput bool
+	var jsonOutput, notify bool
 
 	level = pipeline.LevelStandard
 	i := 0
@@ -77,6 +77,8 @@ func runCheck(ctx context.Context, args []string) int {
 			level = args[i]
 		case "--json":
 			jsonOutput = true
+		case "--notify":
+			notify = true
 		case "--citizen":
 			i++
 			if i >= len(args) {
@@ -109,6 +111,9 @@ func runCheck(ctx context.Context, args []string) int {
 	citizen = resolveCitizen(citizen, repoPath)
 
 	v := pipeline.Run(ctx, repoPath, level, citizen)
+	if (notify || strings.EqualFold(strings.TrimSpace(os.Getenv("CI")), "true")) && v.Score < 1.0 {
+		publishFailureAlert(v)
+	}
 
 	if beadID := bead.Record(v); beadID != "" {
 		v.Bead = beadID
@@ -385,6 +390,7 @@ Usage:
 Check flags:
   --level quick|standard|deep   Check level (default: standard)
   --json                        Output verdict as JSON
+  --notify                      Publish relay alert on failure
   --citizen <name>              Set actor name
 
 Health flags:
@@ -476,4 +482,28 @@ func gitUserName(repoPath string) string {
 		return ""
 	}
 	return strings.TrimSpace(string(out))
+}
+
+func publishFailureAlert(v verdict.Verdict) {
+	body, err := buildFailureAlertBody(v)
+	if err != nil {
+		return
+	}
+	exec.Command("relay", "send", "--to", "system", "--type", "alert", "--body", string(body)).Run()
+}
+
+func buildFailureAlertBody(v verdict.Verdict) ([]byte, error) {
+	failed := make([]string, 0, len(v.Gates))
+	for _, gate := range v.Gates {
+		if !gate.Pass && !gate.Skipped {
+			failed = append(failed, gate.Name)
+		}
+	}
+	return json.Marshal(map[string]any{
+		"source":       "gate",
+		"repo":         v.Repo,
+		"score":        v.Score,
+		"failed_gates": failed,
+		"severity":     "warning",
+	})
 }

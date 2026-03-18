@@ -16,6 +16,38 @@ import (
 	"polis/gate/internal/verdict"
 )
 
+func TestBuildFailureAlertBody(t *testing.T) {
+	body, err := buildFailureAlertBody(verdict.Verdict{
+		Repo:  "test-repo",
+		Score: 0.5,
+		Gates: []verdict.GateResult{
+			{Name: "tests", Pass: false},
+			{Name: "lint", Pass: true},
+			{Name: "ubs", Pass: false, Skipped: true},
+		},
+	})
+	if err != nil {
+		t.Fatalf("buildFailureAlertBody() error = %v", err)
+	}
+
+	var got struct {
+		Source      string   `json:"source"`
+		Repo        string   `json:"repo"`
+		Score       float64  `json:"score"`
+		FailedGates []string `json:"failed_gates"`
+		Severity    string   `json:"severity"`
+	}
+	if err := json.Unmarshal(body, &got); err != nil {
+		t.Fatalf("Unmarshal() error = %v", err)
+	}
+	if got.Source != "gate" || got.Repo != "test-repo" || got.Score != 0.5 || got.Severity != "warning" {
+		t.Fatalf("unexpected payload: %+v", got)
+	}
+	if len(got.FailedGates) != 1 || got.FailedGates[0] != "tests" {
+		t.Fatalf("failed gates = %v, want [tests]", got.FailedGates)
+	}
+}
+
 func TestValidateFilterValue(t *testing.T) {
 	tests := []struct {
 		name    string
