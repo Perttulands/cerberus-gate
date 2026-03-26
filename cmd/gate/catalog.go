@@ -13,7 +13,14 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-const defaultRegistryPath = "/home/polis/tools/gate/registry.yaml"
+const fallbackRegistryPath = "/home/polis/tools/gate/registry.yaml"
+
+func defaultRegistryPath() string {
+	if v := os.Getenv("GATE_REGISTRY"); v != "" {
+		return v
+	}
+	return fallbackRegistryPath
+}
 
 type registry struct {
 	Entries []registryEntry `yaml:"entries"`
@@ -34,7 +41,7 @@ type catalogResult struct {
 }
 
 func runCatalogCheck(ctx context.Context, args []string) int {
-	registryPath := defaultRegistryPath
+	registryPath := defaultRegistryPath()
 	var jsonOutput bool
 
 	i := 0

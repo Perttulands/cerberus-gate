@@ -282,6 +282,50 @@ func TestCatalogCheck_AllPass_ExitZero(t *testing.T) {
 	})
 }
 
+func TestCatalogCheck_EnvOverride(t *testing.T) {
+	tmp := t.TempDir()
+	sourceFile := filepath.Join(tmp, "source.md")
+	os.WriteFile(sourceFile, []byte("content"), 0o644)
+
+	reg := writeTempRegistry(t, tmp, `entries:
+  - name: env-test
+    bins: [ls]
+    source: `+sourceFile+`
+`)
+
+	t.Setenv("GATE_REGISTRY", reg)
+
+	output := captureStdout(t, func() {
+		// No --registry flag — should pick up GATE_REGISTRY env var
+		code := runCatalogCheck(context.Background(), []string{"--json"})
+		if code != 0 {
+			t.Errorf("expected exit 0, got %d", code)
+		}
+	})
+
+	var results []catalogResult
+	if err := json.Unmarshal([]byte(strings.TrimSpace(output)), &results); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if len(results) != 1 || results[0].Name != "env-test" {
+		t.Errorf("expected env-test entry, got %+v", results)
+	}
+}
+
+func TestDefaultRegistryPath_EnvOverride(t *testing.T) {
+	t.Setenv("GATE_REGISTRY", "/custom/registry.yaml")
+	if got := defaultRegistryPath(); got != "/custom/registry.yaml" {
+		t.Errorf("defaultRegistryPath() = %q, want /custom/registry.yaml", got)
+	}
+}
+
+func TestDefaultRegistryPath_Fallback(t *testing.T) {
+	t.Setenv("GATE_REGISTRY", "")
+	if got := defaultRegistryPath(); got != fallbackRegistryPath {
+		t.Errorf("defaultRegistryPath() = %q, want %q", got, fallbackRegistryPath)
+	}
+}
+
 func TestCatalogCheck_FlagErrors(t *testing.T) {
 	oldErr := os.Stderr
 	os.Stderr, _ = os.Open(os.DevNull)
