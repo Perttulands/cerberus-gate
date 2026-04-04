@@ -349,6 +349,200 @@ func TestCatalogCheck_FlagErrors(t *testing.T) {
 	}
 }
 
+func TestCatalogCheck_MissingTarget_STALE(t *testing.T) {
+	tmp := t.TempDir()
+	sourceFile := filepath.Join(tmp, "source.md")
+	os.WriteFile(sourceFile, []byte("content"), 0o644)
+
+	reg := writeTempRegistry(t, tmp, `entries:
+  - name: stale-target
+    bins: [ls]
+    source: `+sourceFile+`
+    targets:
+      - /tmp/nonexistent-target-catalog-test-xyz
+`)
+
+	output := captureStdout(t, func() {
+		code := runCatalogCheck(context.Background(), []string{"--registry", reg, "--json"})
+		if code != 1 {
+			t.Errorf("expected exit 1, got %d", code)
+		}
+	})
+
+	var results []catalogResult
+	json.Unmarshal([]byte(strings.TrimSpace(output)), &results)
+	if len(results) != 1 || results[0].Status != "STALE" {
+		t.Errorf("expected STALE for missing target, got %+v", results)
+	}
+	if len(results[0].Details) == 0 || !strings.Contains(results[0].Details[0], "target missing") {
+		t.Errorf("expected 'target missing' detail, got %v", results[0].Details)
+	}
+}
+
+func TestCatalogCheck_EmptyTarget_STALE(t *testing.T) {
+	tmp := t.TempDir()
+	sourceFile := filepath.Join(tmp, "source.md")
+	os.WriteFile(sourceFile, []byte("content"), 0o644)
+	emptyTarget := filepath.Join(tmp, "empty.md")
+	os.WriteFile(emptyTarget, []byte{}, 0o644)
+
+	reg := writeTempRegistry(t, tmp, `entries:
+  - name: empty-target
+    bins: [ls]
+    source: `+sourceFile+`
+    targets:
+      - `+emptyTarget+`
+`)
+
+	output := captureStdout(t, func() {
+		code := runCatalogCheck(context.Background(), []string{"--registry", reg, "--json"})
+		if code != 1 {
+			t.Errorf("expected exit 1, got %d", code)
+		}
+	})
+
+	var results []catalogResult
+	json.Unmarshal([]byte(strings.TrimSpace(output)), &results)
+	if len(results) != 1 || results[0].Status != "STALE" {
+		t.Errorf("expected STALE for empty target, got %+v", results)
+	}
+	if len(results[0].Details) == 0 || !strings.Contains(results[0].Details[0], "target empty") {
+		t.Errorf("expected 'target empty' detail, got %v", results[0].Details)
+	}
+}
+
+func TestCatalogCheck_BrokenBeatsStalePriority(t *testing.T) {
+	tmp := t.TempDir()
+
+	reg := writeTempRegistry(t, tmp, `entries:
+  - name: broken-and-stale
+    bins: [nonexistent-binary-xyz]
+    source: /tmp/nonexistent-source-xyz
+    targets:
+      - /tmp/nonexistent-target-xyz
+`)
+
+	output := captureStdout(t, func() {
+		code := runCatalogCheck(context.Background(), []string{"--registry", reg, "--json"})
+		if code != 1 {
+			t.Errorf("expected exit 1, got %d", code)
+		}
+	})
+
+	var results []catalogResult
+	json.Unmarshal([]byte(strings.TrimSpace(output)), &results)
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+	// BROKEN should win over STALE
+	if results[0].Status != "BROKEN" {
+		t.Errorf("BROKEN should take priority over STALE, got %q", results[0].Status)
+	}
+	// But stale details should still appear
+	hasStaleDetail := false
+	for _, d := range results[0].Details {
+		if strings.Contains(d, "source missing") || strings.Contains(d, "target missing") {
+			hasStaleDetail = true
+		}
+	}
+	if !hasStaleDetail {
+		t.Errorf("expected stale details alongside BROKEN status, got %v", results[0].Details)
+	}
+}
+
+func TestCatalogCheck_EmptyEntries(t *testing.T) {
+	tmp := t.TempDir()
+	reg := writeTempRegistry(t, tmp, `entries: []`)
+
+	output := captureStdout(t, func() {
+		code := runCatalogCheck(context.Background(), []string{"--registry", reg, "--json"})
+		if code != 0 {
+			t.Errorf("expected exit 0 for empty entries, got %d", code)
+		}
+	})
+
+	var results []catalogResult
+	if err := json.Unmarshal([]byte(strings.TrimSpace(output)), &results); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if len(results) != 0 {
+		t.Errorf("expected 0 results, got %d", len(results))
+	}
+}
+
+func TestCatalogCheck_MultipleBins_FirstMissing(t *testing.T) {
+	tmp := t.TempDir()
+	reg := writeTempRegistry(t, tmp, `entries:
+  - name: multi-bin
+    bins: [nonexistent-xyz, ls, cat]
+`)
+
+	output := captureStdout(t, func() {
+		runCatalogCheck(context.Background(), []string{"--registry", reg, "--json"})
+	})
+
+	var results []catalogResult
+	json.Unmarshal([]byte(strings.TrimSpace(output)), &results)
+	if len(results) != 1 || results[0].Status != "BROKEN" {
+		t.Errorf("expected BROKEN for missing first bin, got %+v", results)
+	}
+}
+
+func TestCatalogCheck_NoBinsNoVerify_PassWithTargets(t *testing.T) {
+	tmp := t.TempDir()
+	targetFile := filepath.Join(tmp, "target.md")
+	os.WriteFile(targetFile, []byte("content"), 0o644)
+
+	reg := writeTempRegistry(t, tmp, `entries:
+  - name: targets-only
+    targets:
+      - `+targetFile+`
+`)
+
+	output := captureStdout(t, func() {
+		code := runCatalogCheck(context.Background(), []string{"--registry", reg, "--json"})
+		if code != 0 {
+			t.Errorf("expected exit 0, got %d", code)
+		}
+	})
+
+	var results []catalogResult
+	json.Unmarshal([]byte(strings.TrimSpace(output)), &results)
+	if len(results) != 1 || results[0].Status != "PASS" {
+		t.Errorf("expected PASS for entry with only targets, got %+v", results)
+	}
+}
+
+func TestCatalogCheck_TableOutput(t *testing.T) {
+	tmp := t.TempDir()
+	sourceFile := filepath.Join(tmp, "src.md")
+	os.WriteFile(sourceFile, []byte("content"), 0o644)
+
+	reg := writeTempRegistry(t, tmp, `entries:
+  - name: table-test
+    bins: [ls]
+    source: `+sourceFile+`
+`)
+
+	output := captureStdout(t, func() {
+		code := runCatalogCheck(context.Background(), []string{"--registry", reg})
+		if code != 0 {
+			t.Errorf("expected exit 0, got %d", code)
+		}
+	})
+
+	// Table output should have headers and entry name
+	if !strings.Contains(output, "NAME") {
+		t.Error("table output should contain NAME header")
+	}
+	if !strings.Contains(output, "STATUS") {
+		t.Error("table output should contain STATUS header")
+	}
+	if !strings.Contains(output, "table-test") {
+		t.Error("table output should contain entry name")
+	}
+}
+
 func TestCatalogCheck_VerifyCommandFailure(t *testing.T) {
 	tmp := t.TempDir()
 	reg := writeTempRegistry(t, tmp, `entries:

@@ -17,6 +17,7 @@ import (
 	"polis/gate/internal/bead"
 	"polis/gate/internal/city"
 	"polis/gate/internal/pipeline"
+	"polis/gate/internal/review"
 	"polis/gate/internal/verdict"
 )
 
@@ -41,6 +42,9 @@ func run(ctx context.Context, args []string) int {
 	cmd := args[0]
 	if cmd == "check" {
 		return runCheck(ctx, args[1:])
+	}
+	if cmd == "review" {
+		return runReview(ctx, args[1:])
 	}
 	if cmd == "health" {
 		return runHealth(ctx, args[1:])
@@ -128,6 +132,159 @@ func runCheck(ctx context.Context, args []string) int {
 	}
 
 	return v.ExitCode
+}
+
+func runReview(ctx context.Context, args []string) int {
+	var beadID, repoPath, runtime string
+	var jsonOutput, contextOnly bool
+
+	repoPath = "."
+	runtime = "codex"
+	i := 0
+	for i < len(args) {
+		switch args[i] {
+		case "--bead":
+			i++
+			if i >= len(args) {
+				fmt.Fprintln(os.Stderr, "--bead requires a value")
+				return 1
+			}
+			beadID = args[i]
+		case "--runtime":
+			i++
+			if i >= len(args) {
+				fmt.Fprintln(os.Stderr, "--runtime requires a value")
+				return 1
+			}
+			runtime = args[i]
+		case "--json":
+			jsonOutput = true
+		case "--context-only":
+			contextOnly = true
+		default:
+			if strings.HasPrefix(args[i], "-") {
+				fmt.Fprintf(os.Stderr, "unknown flag: %s\n", args[i])
+				return 1
+			}
+			if repoPath == "." {
+				repoPath = args[i]
+			}
+		}
+		i++
+	}
+
+	if beadID == "" {
+		fmt.Fprintln(os.Stderr, "--bead flag required: gate review --bead <id> [repo-path]")
+		return 1
+	}
+
+	if runtime != "codex" && runtime != "claude" {
+		fmt.Fprintf(os.Stderr, "invalid runtime %q: use codex or claude\n", runtime)
+		return 1
+	}
+
+	// Step 1: Assemble context bundle
+	bundle, err := review.Assemble(ctx, beadID, repoPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "review failed: %v\n", err)
+		return 1
+	}
+
+	// If fast-path failed, report immediately — no point spawning an agent
+	if bundle.FastPath != nil && !bundle.FastPath.Pass {
+		if jsonOutput {
+			enc := json.NewEncoder(os.Stdout)
+			enc.SetIndent("", "  ")
+			enc.Encode(bundle)
+		} else {
+			fmt.Print(review.FormatBundle(bundle))
+			fmt.Fprintf(os.Stderr, "\nfast-path gate FAILED — skipping agent review\n")
+		}
+		return verdict.ExitFail
+	}
+
+	// Step 2: Write prompt file
+	promptPath, err := review.WritePromptFile(bundle)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "review failed: %v\n", err)
+		return 1
+	}
+
+	// --context-only: print context bundle and prompt path, don't spawn
+	if contextOnly {
+		if jsonOutput {
+			enc := json.NewEncoder(os.Stdout)
+			enc.SetIndent("", "  ")
+			enc.Encode(bundle)
+		} else {
+			fmt.Print(review.FormatBundle(bundle))
+			fmt.Printf("\nprompt written to: %s\n", promptPath)
+			fmt.Printf("verdict expected at: %s\n", review.VerdictPath(beadID))
+		}
+		return verdict.ExitPass
+	}
+
+	// Step 3: Spawn agent and wait for verdict
+	sessionName := fmt.Sprintf("gate-review-%s", beadID)
+	verdictPath := review.VerdictPath(beadID)
+
+	if !jsonOutput {
+		fmt.Printf("spawning %s agent in tmux session %q...\n", runtime, sessionName)
+	}
+
+	spawnResult, err := review.SpawnAndWait(review.SpawnConfig{
+		SessionName: sessionName,
+		WorkDir:     repoPath,
+		PromptPath:  promptPath,
+		VerdictPath: verdictPath,
+		Runtime:     runtime,
+		Deadline:    10 * time.Minute,
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "spawn failed: %v\n", err)
+		return 1
+	}
+
+	if spawnResult.TimedOut {
+		if jsonOutput {
+			enc := json.NewEncoder(os.Stdout)
+			enc.SetIndent("", "  ")
+			enc.Encode(map[string]any{
+				"bead_id": beadID,
+				"verdict": "UNCLEAR",
+				"summary": fmt.Sprintf("agent timed out after %v — manual review required", spawnResult.Duration),
+			})
+		} else {
+			fmt.Fprintf(os.Stderr, "\nagent timed out after %v — manual review required\n", spawnResult.Duration)
+		}
+		return verdict.ExitReview
+	}
+
+	// Verdict file received — parse and validate
+	verdictData, err := os.ReadFile(verdictPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to read verdict: %v\n", err)
+		return 1
+	}
+
+	rv, err := review.ParseVerdict(verdictData)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "invalid verdict: %v\n", err)
+		if !jsonOutput {
+			fmt.Fprintf(os.Stderr, "raw verdict:\n%s\n", string(verdictData))
+		}
+		return 1
+	}
+
+	if jsonOutput {
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		enc.Encode(rv)
+	} else {
+		fmt.Print(review.FormatPrettyVerdict(rv))
+	}
+
+	return review.ExitCodeForVerdict(rv)
 }
 
 func runHealth(ctx context.Context, args []string) int {
@@ -382,10 +539,18 @@ func printUsage() {
 
 Usage:
   gate check <repo-path> [flags]
+  gate review --bead <id> [repo-path] [flags]
   gate health [repo-path] [flags]
   gate city <repo-path> [flags]
   gate catalog-check [flags]
   gate history [flags]
+
+Review flags:
+  --bead <id>                   Bead ID to review (required)
+  --runtime codex|claude        Agent runtime (default: codex)
+  --context-only                Assemble context only, don't spawn agent
+  --json                        Output as JSON
+  [repo-path]                   Repo to review (default: .)
 
 Check flags:
   --level quick|standard|deep   Check level (default: standard)

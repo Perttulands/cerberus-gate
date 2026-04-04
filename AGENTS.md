@@ -29,8 +29,26 @@ gate catalog-check [--registry <path>] [--json]
 ```
 
 **Flags:**
-- `--registry <path>` — Override the registry file path (default: `/home/polis/tools/gate/registry.yaml`)
+- `--registry <path>` — Override the registry file path (default: `/home/polis/tools/gate/registry.yaml`, or `$GATE_REGISTRY` if set)
 - `--json` — Output results as machine-readable JSON instead of a formatted table
+
+**Example (JSON):**
+```json
+[
+  { "name": "work", "status": "PASS" },
+  { "name": "relay", "status": "STALE", "details": ["target missing: /path/to/file.md"] },
+  { "name": "chiron", "status": "BROKEN", "details": ["bin \"chiron\" not on PATH"] }
+]
+```
+
+**Example (table):**
+```
+NAME     STATUS   DETAILS
+───────  ──────   ────────────────────────
+work     PASS
+relay    STALE    target missing: /path/to/file.md
+chiron   BROKEN   bin "chiron" not on PATH
+```
 
 **Output:** Each registry entry gets one of three statuses:
 - **PASS** — Binary on PATH, verify commands succeed, source/target files exist and are non-empty
